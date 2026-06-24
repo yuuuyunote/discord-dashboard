@@ -1,23 +1,10 @@
-# Discord Bot
 discord.py==2.3.2
-
-# Webフレームワーク
 fastapi==0.111.0
 uvicorn[standard]==0.29.0
 jinja2==3.1.4
 python-multipart==0.0.9
-
-# 環境変数
 python-dotenv==1.0.1
-
-# HTTP クライアント（OAuth2・Turso用）
 httpx==0.27.0
-
-# セッション管理
 itsdangerous==2.2.0
-
-# Turso（libsql）クライアント
-libsql-client==0.3.1
-
-# 非同期ファイル操作
+libsql-experimental==0.0.37
 aiofiles==23.2.1
