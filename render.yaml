@@ -1,0 +1,52 @@
+services:
+  # Discord Bot（スリープなしWorker）
+  - type: worker
+    name: discord-bot
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python main.py
+    envVars:
+      - key: DISCORD_TOKEN
+        sync: false
+      - key: DISCORD_CLIENT_ID
+        sync: false
+      - key: DISCORD_CLIENT_SECRET
+        sync: false
+      - key: GUILD_ID
+        sync: false
+      - key: MOD_ROLE_ID
+        sync: false
+      - key: REDIRECT_URI
+        sync: false
+      - key: SECRET_KEY
+        sync: false
+      - key: TURSO_URL
+        sync: false
+      - key: TURSO_TOKEN
+        sync: false
+
+  # Webダッシュボード（Web Service）
+  - type: web
+    name: discord-dashboard
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python main.py
+    envVars:
+      - key: DISCORD_TOKEN
+        sync: false
+      - key: DISCORD_CLIENT_ID
+        sync: false
+      - key: DISCORD_CLIENT_SECRET
+        sync: false
+      - key: GUILD_ID
+        sync: false
+      - key: MOD_ROLE_ID
+        sync: false
+      - key: REDIRECT_URI
+        sync: false
+      - key: SECRET_KEY
+        sync: false
+      - key: TURSO_URL
+        sync: false
+      - key: TURSO_TOKEN
+        sync: false
