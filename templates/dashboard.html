@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="ja" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ダッシュボード — Community Dashboard</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <style>
+    .dash-layout { display: flex; min-height: 100vh; padding-top: var(--nav-h); }
+
+    /* サイドバー */
+    .sidebar {
+      width: 220px;
+      flex-shrink: 0;
+      border-right: 1px solid var(--border);
+      padding: 32px 0;
+      position: fixed;
+      top: var(--nav-h);
+      left: 0;
+      bottom: 0;
+      overflow-y: auto;
+      background: var(--bg-card);
+      transition: background var(--transition), border-color var(--transition);
+    }
+    .sidebar-label {
+      font-family: 'DM Mono', monospace;
+      font-size: 10px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--text-sub);
+      padding: 0 20px;
+      margin-bottom: 8px;
+    }
+    .sidebar-nav { display: flex; flex-direction: column; gap: 2px; padding: 0 12px; }
+    .sidebar-nav a {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      border-radius: var(--radius-sm);
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--text-sub);
+      transition: all var(--transition);
+      text-decoration: none;
+    }
+    .sidebar-nav a:hover { color: var(--text); background: var(--border); }
+    .sidebar-nav a.active { color: var(--accent); background: var(--accent-light); }
+    .sidebar-nav a i { width: 16px; text-align: center; font-size: 13px; }
+    .sidebar-divider { border: none; border-top: 1px solid var(--border); margin: 16px 20px; }
+
+    /* メインコンテンツ */
+    .main-content {
+      margin-left: 220px;
+      flex: 1;
+      padding: 40px 40px;
+      max-width: calc(100% - 220px);
+    }
+
+    /* ページヘッダー */
+    .page-header { margin-bottom: 36px; }
+    .page-header-label {
+      font-family: 'DM Mono', monospace;
+      font-size: 10px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 6px;
+    }
+    .page-header h1 {
+      font-family: 'DM Serif Display', serif;
+      font-size: 28px;
+      color: var(--text);
+    }
+    .page-header p { font-size: 13px; color: var(--text-sub); margin-top: 4px; }
+
+    /* 統計グリッド */
+    .stats-grid-dash {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+      margin-bottom: 36px;
+    }
+    .stat-card {
+      padding: 24px;
+      border-radius: var(--radius);
+    }
+    .stat-card-label {
+      font-family: 'DM Mono', monospace;
+      font-size: 10px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--text-sub);
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .stat-card-label i { color: var(--accent); }
+    .stat-card-value {
+      font-family: 'DM Serif Display', serif;
+      font-size: 36px;
+      color: var(--text);
+      line-height: 1;
+    }
+    .stat-card-value span { font-size: 18px; color: var(--accent); }
+
+    /* セクションタイトル */
+    .section-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+    }
+    .section-head h2 {
+      font-family: 'DM Serif Display', serif;
+      font-size: 20px;
+      color: var(--text);
+    }
+
+    /* テーブル */
+    .data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .data-table th {
+      font-family: 'DM Mono', monospace;
+      font-size: 10px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--text-sub);
+      padding: 10px 16px;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+    }
+    .data-table td {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+      color: var(--text);
+      vertical-align: middle;
+    }
+    .data-table tr:last-child td { border-bottom: none; }
+    .data-table tr:hover td { background: var(--accent-light); }
+
+    /* バッジ */
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 2px 8px;
+      border-radius: 100px;
+      font-family: 'DM Mono', monospace;
+      font-size: 11px;
+      font-weight: 500;
+    }
+    .badge-green  { background: var(--accent-light); color: var(--accent); }
+    .badge-red    { background: rgba(220,60,60,0.12); color: #e06060; }
+    .badge-gray   { background: var(--border); color: var(--text-sub); }
+    .badge-orange { background: rgba(220,140,40,0.12); color: #e08830; }
+
+    /* メモ入力 */
+    .memo-form { display: flex; gap: 8px; align-items: center; }
+    .memo-input {
+      flex: 1;
+      padding: 6px 10px;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border);
+      background: var(--bg);
+      color: var(--text);
+      font-size: 12px;
+      font-family: 'Noto Sans JP', sans-serif;
+      transition: border-color var(--transition);
+    }
+    .memo-input:focus { outline: none; border-color: var(--accent); }
+    .memo-save-btn {
+      padding: 6px 12px;
+      border-radius: var(--radius-sm);
+      background: var(--accent);
+      color: #fff;
+      font-size: 12px;
+      font-weight: 500;
+      border: none;
+      cursor: pointer;
+      transition: all var(--transition);
+      white-space: nowrap;
+    }
+    .memo-save-btn:hover { opacity: 0.85; }
+    .memo-saved { color: var(--accent); font-size: 11px; display: none; }
+
+    /* チャンネルランキング */
+    .ch-bar-wrap { display: flex; flex-direction: column; gap: 8px; }
+    .ch-bar-item { display: flex; align-items: center; gap: 12px; }
+    .ch-bar-label { font-size: 13px; color: var(--text); width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .ch-bar-track { flex: 1; height: 8px; background: var(--border); border-radius: 4px; overflow: hidden; }
+    .ch-bar-fill  { height: 100%; background: var(--accent); border-radius: 4px; transition: width 0.6s ease; }
+    .ch-bar-count { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--text-sub); width: 48px; text-align: right; }
+
+    /* 2カラムグリッド */
+    .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+    .card-inner { padding: 24px; }
+
+    /* CSV ボタン群 */
+    .csv-btns { display: flex; gap: 10px; flex-wrap: wrap; }
+
+    /* トースト */
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      padding: 12px 20px;
+      border-radius: var(--radius-sm);
+      background: var(--accent);
+      color: #fff;
+      font-size: 13px;
+      font-weight: 500;
+      opacity: 0;
+      transform: translateY(8px);
+      transition: all 0.3s ease;
+      pointer-events: none;
+      z-index: 9999;
+    }
+    .toast.show { opacity: 1; transform: translateY(0); }
+
+    /* テーマトグル */
+    .nav-top {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      height: var(--nav-h);
+      background: var(--bg-nav);
+      backdrop-filter: blur(12px) saturate(160%);
+      border-bottom: 1px solid var(--border);
+      z-index: 1000;
+      display: flex;
+      align-items: center;
+      padding: 0 32px;
+      gap: 16px;
+    }
+    .nav-top-logo {
+      font-family: 'DM Mono', monospace;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--accent);
+      letter-spacing: 0.04em;
+      flex: 1;
+    }
+    .nav-top-user {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 13px;
+      color: var(--text-sub);
+    }
+    .nav-top-avatar {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      overflow: hidden;
+      background: var(--border);
+    }
+    .nav-top-avatar img { width: 100%; height: 100%; object-fit: cover; }
+
+    @media (max-width: 900px) {
+      .stats-grid-dash { grid-template-columns: repeat(2, 1fr); }
+      .two-col { grid-template-columns: 1fr; }
+      .sidebar { display: none; }
+      .main-content { margin-left: 0; max-width: 100%; padding: 24px; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- トップナビ -->
+  <nav class="nav-top">
+    <span class="nav-top-logo">
+      <i class="fa-solid fa-terminal"></i> Guide Base + / Dashboard
+    </span>
+    <label class="theme-toggle" title="テーマ切替">
+      <input type="checkbox" id="themeChk">
+      <span class="theme-toggle-track"></span>
+      <span class="theme-toggle-thumb">
+        <span id="themeIcon">☀️</span>
+      </span>
+    </label>
+    <div class="nav-top-user">
+      {% if session.avatar %}
+      <div class="nav-top-avatar">
+        <img src="https://cdn.discordapp.com/avatars/{{ session.user_id }}/{{ session.avatar }}.png" alt="">
+      </div>
+      {% endif %}
+      {{ session.username }}
+      <a href="/logout" style="color:var(--text-sub); font-size:12px; margin-left:8px;">
+        <i class="fa-solid fa-right-from-bracket"></i>
+      </a>
+    </div>
+  </nav>
+
+  <div class="dash-layout">
+
+    <!-- サイドバー -->
+    <aside class="sidebar">
+      <div class="sidebar-label">Navigation</div>
+      <nav class="sidebar-nav">
+        <a href="/dashboard" class="active">
+          <i class="fa-solid fa-chart-line"></i> ダッシュボード
+        </a>
+        <a href="/search">
+          <i class="fa-solid fa-magnifying-glass"></i> ユーザー検索
+        </a>
+      </nav>
+      <hr class="sidebar-divider">
+      <div class="sidebar-label">Export</div>
+      <nav class="sidebar-nav">
+        <a href="/api/csv/users" target="_blank">
+          <i class="fa-solid fa-file-csv"></i> ユーザーCSV
+        </a>
+        <a href="/api/csv/punishments" target="_blank">
+          <i class="fa-solid fa-file-csv"></i> 処罰履歴CSV
+        </a>
+        <a href="/api/csv/invites" target="_blank">
+          <i class="fa-solid fa-file-csv"></i> 招待リンクCSV
+        </a>
+      </nav>
+    </aside>
+
+    <!-- メイン -->
+    <main class="main-content">
+
+      <!-- ページヘッダー -->
+      <div class="page-header fade-up">
+        <div class="page-header-label">Overview</div>
+        <h1>コミュニティ分析</h1>
+        <p>サーバー全体のアクティビティと招待リンクの状況</p>
+      </div>
+
+      <!-- 統計カード -->
+      <div class="stats-grid-dash fade-up fade-up-1">
+        <div class="card stat-card">
+          <div class="stat-card-label"><i class="fa-solid fa-users"></i> サーバー人数</div>
+          <div class="stat-card-value">{{ stats.server_member_count }}<span>人</span></div>
+        </div>
+        <div class="card stat-card">
+          <div class="stat-card-label"><i class="fa-solid fa-bolt"></i> アクティブ率（30日）</div>
+          <div class="stat-card-value">{{ stats.active_rate }}<span>%</span></div>
+        </div>
+        <div class="card stat-card">
+          <div class="stat-card-label"><i class="fa-solid fa-message"></i> 総発言数</div>
+          <div class="stat-card-value">{{ "{:,}".format(stats.total_messages) }}<span>件</span></div>
+        </div>
+        <div class="card stat-card">
+          <div class="stat-card-label"><i class="fa-solid fa-gavel"></i> 処罰件数</div>
+          <div class="stat-card-value">{{ stats.total_punishments }}<span>件</span></div>
+        </div>
+      </div>
+
+      <!-- チャンネル熱量 & 最近の処罰 -->
+      <div class="two-col fade-up fade-up-2">
+
+        <!-- チャンネルランキング -->
+        <div class="card">
+          <div class="card-inner">
+            <div class="section-head">
+              <h2>チャンネル熱量</h2>
+              <span class="badge badge-gray">直近全期間</span>
+            </div>
+            {% if ch_ranking %}
+            {% set max_count = ch_ranking[0].msg_count %}
+            <div class="ch-bar-wrap">
+              {% for ch in ch_ranking %}
+              <div class="ch-bar-item">
+                <div class="ch-bar-label">{{ ch.channel_name }}</div>
+                <div class="ch-bar-track">
+                  <div class="ch-bar-fill" style="width: {{ (ch.msg_count / max_count * 100)|round }}%"></div>
+                </div>
+                <div class="ch-bar-count">{{ "{:,}".format(ch.msg_count) }}</div>
+              </div>
+              {% endfor %}
+            </div>
+            {% else %}
+            <p style="color:var(--text-sub); font-size:13px;">データなし</p>
+            {% endif %}
+          </div>
+        </div>
+
+        <!-- 最近の処罰 -->
+        <div class="card">
+          <div class="card-inner">
+            <div class="section-head">
+              <h2>最近の処罰</h2>
+              <a href="/search" class="badge badge-green" style="text-decoration:none;">
+                全件検索 <i class="fa-solid fa-arrow-right" style="font-size:10px;"></i>
+              </a>
+            </div>
+            {% if recent_puns %}
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>対象</th>
+                  <th>種別</th>
+                  <th>実行者</th>
+                  <th>日時</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for p in recent_puns %}
+                <tr>
+                  <td>{{ p.target_name }}</td>
+                  <td>
+                    {% if p.punishment_type == 'BAN' %}
+                      <span class="badge badge-red">BAN</span>
+                    {% elif p.punishment_type == 'KICK' %}
+                      <span class="badge badge-orange">KICK</span>
+                    {% elif p.punishment_type == 'TIMEOUT' %}
+                      <span class="badge badge-gray">TO</span>
+                    {% else %}
+                      <span class="badge badge-green">WARN</span>
+                    {% endif %}
+                  </td>
+                  <td style="color:var(--text-sub);">{{ p.executor }}</td>
+                  <td style="font-family:'DM Mono',monospace; font-size:11px; color:var(--text-sub);">
+                    {{ p.executed_at[:10] }}
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+            {% else %}
+            <p style="color:var(--text-sub); font-size:13px;">処罰履歴なし</p>
+            {% endif %}
+          </div>
+        </div>
+
+      </div>
+
+      <!-- 招待リンク一覧 -->
+      <div class="card fade-up fade-up-3" style="margin-top: 24px;">
+        <div class="card-inner">
+          <div class="section-head">
+            <h2>招待リンク分析</h2>
+            <a href="/api/csv/invites" class="btn btn-outline" style="font-size:12px; padding:6px 14px;">
+              <i class="fa-solid fa-download"></i> CSV
+            </a>
+          </div>
+          {% if invites %}
+          <div style="overflow-x: auto;">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>コード</th>
+                  <th>用途メモ</th>
+                  <th>作成者</th>
+                  <th>入室数</th>
+                  <th>即抜け率</th>
+                  <th>貢献スコア</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for inv in invites %}
+                <tr>
+                  <td>
+                    <span style="font-family:'DM Mono',monospace; font-size:12px; color:var(--accent);">
+                      {{ inv.code }}
+                    </span>
+                  </td>
+                  <td>
+                    <form class="memo-form" data-code="{{ inv.code }}">
+                      <input
+                        class="memo-input"
+                        type="text"
+                        value="{{ inv.memo or '' }}"
+                        placeholder="用途メモを入力..."
+                        maxlength="100"
+                      >
+                      <button type="submit" class="memo-save-btn">保存</button>
+                      <span class="memo-saved"><i class="fa-solid fa-check"></i></span>
+                    </form>
+                  </td>
+                  <td style="font-family:'DM Mono',monospace; font-size:11px; color:var(--text-sub);">
+                    {{ inv.creator_id }}
+                  </td>
+                  <td style="text-align:center;">{{ inv.total_joins or 0 }}</td>
+                  <td>
+                    {% set rate = inv.instant_leave_rate or 0 %}
+                    {% if rate >= 50 %}
+                      <span class="badge badge-red">{{ rate }}%</span>
+                    {% elif rate >= 25 %}
+                      <span class="badge badge-orange">{{ rate }}%</span>
+                    {% else %}
+                      <span class="badge badge-green">{{ rate }}%</span>
+                    {% endif %}
+                  </td>
+                  <td style="font-family:'DM Mono',monospace; font-size:12px;">
+                    {{ inv.contribution_score or 0 }}pt
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          {% else %}
+          <p style="color:var(--text-sub); font-size:13px; padding: 8px 0;">
+            招待リンクデータなし（Botが起動するとキャッシュされます）
+          </p>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- 運営実績 -->
+      {% if mod_stats %}
+      <div class="card fade-up fade-up-4" style="margin-top: 24px;">
+        <div class="card-inner">
+          <div class="section-head">
+            <h2>運営実績</h2>
+          </div>
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>モデレーターID</th>
+                <th>手動警告数</th>
+                <th>監査ログ対応数</th>
+                <th>最終更新</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for m in mod_stats %}
+              <tr>
+                <td style="font-family:'DM Mono',monospace; font-size:12px;">{{ m.moderator_id }}</td>
+                <td style="text-align:center;">{{ m.warn_count }}</td>
+                <td style="text-align:center;">{{ m.audit_count }}</td>
+                <td style="font-family:'DM Mono',monospace; font-size:11px; color:var(--text-sub);">
+                  {{ m.updated_at[:10] }}
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      {% endif %}
+
+    </main>
+  </div>
+
+  <!-- トースト通知 -->
+  <div class="toast" id="toast"></div>
+
+  <script>
+    // ─── テーマ ───────────────────────────────────────────
+    const chk      = document.getElementById('themeChk');
+    const icon     = document.getElementById('themeIcon');
+    const saved    = localStorage.getItem('theme') || 'dark';
+    document.documentElement.setAttribute('data-theme', saved);
+    chk.checked    = saved === 'light';
+    icon.textContent = saved === 'light' ? '🌙' : '☀️';
+
+    chk.addEventListener('change', () => {
+      const t = chk.checked ? 'light' : 'dark';
+      document.documentElement.setAttribute('data-theme', t);
+      localStorage.setItem('theme', t);
+      icon.textContent = t === 'light' ? '🌙' : '☀️';
+    });
+
+    // ─── トースト ─────────────────────────────────────────
+    function showToast(msg, ok = true) {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.style.background = ok ? 'var(--accent)' : '#e06060';
+      t.classList.add('show');
+      setTimeout(() => t.classList.remove('show'), 2500);
+    }
+
+    // ─── 招待メモ保存 ─────────────────────────────────────
+    document.querySelectorAll('.memo-form').forEach(form => {
+      form.addEventListener('submit', async e => {
+        e.preventDefault();
+        const code  = form.dataset.code;
+        const memo  = form.querySelector('.memo-input').value;
+        const saved = form.querySelector('.memo-saved');
+
+        const fd = new FormData();
+        fd.append('code', code);
+        fd.append('memo', memo);
+
+        try {
+          const res = await fetch('/api/invite/memo', { method: 'POST', body: fd });
+          const data = await res.json();
+          if (data.ok) {
+            showToast('メモを保存しました');
+            saved.style.display = 'inline';
+            setTimeout(() => { saved.style.display = 'none'; }, 2000);
+          } else {
+            showToast('保存に失敗しました', false);
+          }
+        } catch {
+          showToast('通信エラー', false);
+        }
+      });
+    });
+  </script>
+</body>
+</html>

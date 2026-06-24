@@ -1,0 +1,29 @@
+# 秘密情報（絶対にコミットしない）
+.env
+
+# Python仮想環境
+venv/
+.venv/
+env/
+
+# Pythonキャッシュ
+__pycache__/
+*.py[cod]
+*.pyo
+
+# ビルド
+build/
+dist/
+*.egg-info/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# ログ
+*.log
+logs/
