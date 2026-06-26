@@ -1,7 +1,7 @@
 """
 database.py
 Neon（PostgreSQL）対応版
-全テーブル定義・データ操作関数
+テーブル追加：user_notes, retention_checks
 """
 
 import os
@@ -12,15 +12,22 @@ from typing import Optional
 import psycopg2
 import psycopg2.extras
 
-DATABASE_URL = os.getenv("DATABASE_URL", "")
-
-
-# ─────────────────────────────────────────────────────────
-# 接続ヘルパー
-# ─────────────────────────────────────────────────────────
 
 def get_conn():
-    return psycopg2.connect(DATABASE_URL, cursor_factory=psycopg2.extras.RealDictCursor)
+    url = os.environ.get("DATABASE_URL", "")
+    if not url:
+        try:
+            with open("/home/container/.env", "r") as f:
+                for line in f:
+                    line = line.strip()
+                    if line.startswith("DATABASE_URL="):
+                        url = line[len("DATABASE_URL="):]
+                        break
+        except Exception:
+            pass
+    if not url:
+        raise ValueError("DATABASE_URL が設定されていません")
+    return psycopg2.connect(url, cursor_factory=psycopg2.extras.RealDictCursor)
 
 
 def _execute(sql: str, args: tuple = ()) -> list[dict]:
@@ -55,6 +62,7 @@ def _execute_many(statements: list[tuple]) -> None:
 
 def init_db() -> None:
     stmts = [
+        # 既存テーブル
         ("CREATE TABLE IF NOT EXISTS invites (code TEXT PRIMARY KEY, memo TEXT DEFAULT '', instant_leave INTEGER DEFAULT 0, total_messages INTEGER DEFAULT 0, total_vc_sec INTEGER DEFAULT 0, creator_id TEXT NOT NULL, created_at TEXT NOT NULL)", ()),
         ("CREATE TABLE IF NOT EXISTS users (user_id TEXT PRIMARY KEY, username TEXT NOT NULL, account_created TEXT NOT NULL, joined_at TEXT, initial_roles TEXT DEFAULT '[]', updated_at TEXT NOT NULL)", ()),
         ("CREATE TABLE IF NOT EXISTS join_logs (id SERIAL PRIMARY KEY, user_id TEXT NOT NULL, invite_code TEXT, joined_at TEXT NOT NULL, left_at TEXT)", ()),
@@ -62,12 +70,43 @@ def init_db() -> None:
         ("CREATE TABLE IF NOT EXISTS voice_logs (id SERIAL PRIMARY KEY, user_id TEXT NOT NULL, joined_at TEXT NOT NULL, left_at TEXT)", ()),
         ("CREATE TABLE IF NOT EXISTS punishments (id SERIAL PRIMARY KEY, user_id TEXT NOT NULL, target_name TEXT NOT NULL, punishment_type TEXT NOT NULL, executor TEXT NOT NULL, reason TEXT DEFAULT '', executed_at TEXT NOT NULL)", ()),
         ("CREATE TABLE IF NOT EXISTS moderator_stats (moderator_id TEXT PRIMARY KEY, warn_count INTEGER DEFAULT 0, audit_count INTEGER DEFAULT 0, updated_at TEXT NOT NULL)", ()),
-        ("CREATE INDEX IF NOT EXISTS idx_join_user   ON join_logs(user_id)", ()),
-        ("CREATE INDEX IF NOT EXISTS idx_join_invite ON join_logs(invite_code)", ()),
-        ("CREATE INDEX IF NOT EXISTS idx_act_user    ON activity_logs(user_id)", ()),
-        ("CREATE INDEX IF NOT EXISTS idx_act_ch      ON activity_logs(channel_id)", ()),
-        ("CREATE INDEX IF NOT EXISTS idx_voice_user  ON voice_logs(user_id)", ()),
-        ("CREATE INDEX IF NOT EXISTS idx_pun_user    ON punishments(user_id)", ()),
+
+        # 新規：ユーザーノート（複数追記対応）
+        ("""CREATE TABLE IF NOT EXISTS user_notes (
+            id          SERIAL PRIMARY KEY,
+            user_id     TEXT NOT NULL,
+            author_id   TEXT NOT NULL,
+            author_name TEXT NOT NULL,
+            content     TEXT NOT NULL,
+            created_at  TEXT NOT NULL
+        )""", ()),
+
+        # 新規：定着率チェック
+        ("""CREATE TABLE IF NOT EXISTS retention_checks (
+            id          SERIAL PRIMARY KEY,
+            user_id     TEXT NOT NULL,
+            invite_code TEXT,
+            joined_at   TEXT NOT NULL,
+            check_7d    BOOLEAN DEFAULT NULL,
+            check_30d   BOOLEAN DEFAULT NULL,
+            checked_at  TEXT
+        )""", ()),
+
+        # 新規：初回発言ロール付与済みフラグ
+        ("""CREATE TABLE IF NOT EXISTS first_message_granted (
+            user_id     TEXT PRIMARY KEY,
+            granted_at  TEXT NOT NULL
+        )""", ()),
+
+        # インデックス
+        ("CREATE INDEX IF NOT EXISTS idx_join_user    ON join_logs(user_id)", ()),
+        ("CREATE INDEX IF NOT EXISTS idx_join_invite  ON join_logs(invite_code)", ()),
+        ("CREATE INDEX IF NOT EXISTS idx_act_user     ON activity_logs(user_id)", ()),
+        ("CREATE INDEX IF NOT EXISTS idx_act_ch       ON activity_logs(channel_id)", ()),
+        ("CREATE INDEX IF NOT EXISTS idx_voice_user   ON voice_logs(user_id)", ()),
+        ("CREATE INDEX IF NOT EXISTS idx_pun_user     ON punishments(user_id)", ()),
+        ("CREATE INDEX IF NOT EXISTS idx_notes_user   ON user_notes(user_id)", ()),
+        ("CREATE INDEX IF NOT EXISTS idx_ret_user     ON retention_checks(user_id)", ()),
     ]
     _execute_many(stmts)
 
@@ -174,6 +213,26 @@ def get_join_log_by_user(user_id: str) -> Optional[dict]:
     )
     return rows[0] if rows else None
 
+def get_join_logs_by_date(days: int = 30) -> list[dict]:
+    """直近N日の日別入室数を返す"""
+    return _execute("""
+        SELECT DATE(joined_at::timestamp) AS date, COUNT(*) AS count
+        FROM join_logs
+        WHERE joined_at >= (NOW() - INTERVAL '%s days')::TEXT
+        GROUP BY DATE(joined_at::timestamp)
+        ORDER BY date ASC
+    """, (days,))
+
+def get_join_logs_by_invite(invite_code: str) -> list[dict]:
+    """招待コード別のユーザー一覧"""
+    return _execute("""
+        SELECT jl.*, u.username
+        FROM join_logs jl
+        LEFT JOIN users u ON u.user_id = jl.user_id
+        WHERE jl.invite_code = %s
+        ORDER BY jl.joined_at DESC
+    """, (invite_code,))
+
 
 # ─────────────────────────────────────────────────────────
 # activity_logs 操作
@@ -194,6 +253,17 @@ def get_channel_ranking(limit: int = 10) -> list[dict]:
 def get_user_message_count(user_id: str) -> int:
     rows = _execute("SELECT COUNT(*) AS cnt FROM activity_logs WHERE user_id=%s", (user_id,))
     return rows[0]["cnt"] if rows else 0
+
+def has_first_message(user_id: str) -> bool:
+    rows = _execute("SELECT 1 FROM first_message_granted WHERE user_id=%s", (user_id,))
+    return len(rows) > 0
+
+def record_first_message(user_id: str) -> None:
+    now = datetime.now(timezone.utc).isoformat()
+    _execute(
+        "INSERT INTO first_message_granted (user_id, granted_at) VALUES (%s,%s) ON CONFLICT DO NOTHING",
+        (user_id, now)
+    )
 
 
 # ─────────────────────────────────────────────────────────
@@ -270,6 +340,76 @@ def get_all_mod_stats() -> list[dict]:
 
 
 # ─────────────────────────────────────────────────────────
+# user_notes 操作
+# ─────────────────────────────────────────────────────────
+
+def add_user_note(user_id: str, author_id: str, author_name: str, content: str) -> None:
+    now = datetime.now(timezone.utc).isoformat()
+    _execute("""
+        INSERT INTO user_notes (user_id, author_id, author_name, content, created_at)
+        VALUES (%s,%s,%s,%s,%s)
+    """, (user_id, author_id, author_name, content, now))
+
+def get_user_notes(user_id: str) -> list[dict]:
+    return _execute(
+        "SELECT * FROM user_notes WHERE user_id=%s ORDER BY created_at DESC",
+        (user_id,)
+    )
+
+def delete_user_note(note_id: int) -> None:
+    _execute("DELETE FROM user_notes WHERE id=%s", (note_id,))
+
+
+# ─────────────────────────────────────────────────────────
+# retention_checks 操作
+# ─────────────────────────────────────────────────────────
+
+def add_retention_check(user_id: str, invite_code: Optional[str], joined_at: str) -> None:
+    _execute("""
+        INSERT INTO retention_checks (user_id, invite_code, joined_at)
+        VALUES (%s,%s,%s)
+        ON CONFLICT DO NOTHING
+    """, (user_id, invite_code, joined_at))
+
+def get_pending_retention_checks() -> list[dict]:
+    """7日・30日チェックが未完了のレコードを返す"""
+    return _execute("""
+        SELECT * FROM retention_checks
+        WHERE check_7d IS NULL OR check_30d IS NULL
+        ORDER BY joined_at ASC
+    """)
+
+def update_retention_check(user_id: str, check_7d: Optional[bool], check_30d: Optional[bool]) -> None:
+    now = datetime.now(timezone.utc).isoformat()
+    if check_7d is not None:
+        _execute(
+            "UPDATE retention_checks SET check_7d=%s, checked_at=%s WHERE user_id=%s",
+            (check_7d, now, user_id)
+        )
+    if check_30d is not None:
+        _execute(
+            "UPDATE retention_checks SET check_30d=%s, checked_at=%s WHERE user_id=%s",
+            (check_30d, now, user_id)
+        )
+
+def get_retention_stats_by_invite() -> list[dict]:
+    """招待コード別の定着率を返す"""
+    return _execute("""
+        SELECT
+            invite_code,
+            COUNT(*) AS total,
+            COUNT(CASE WHEN check_7d = TRUE THEN 1 END) AS retained_7d,
+            COUNT(CASE WHEN check_30d = TRUE THEN 1 END) AS retained_30d,
+            ROUND(COUNT(CASE WHEN check_7d = TRUE THEN 1 END)::NUMERIC / NULLIF(COUNT(*),0) * 100, 1) AS rate_7d,
+            ROUND(COUNT(CASE WHEN check_30d = TRUE THEN 1 END)::NUMERIC / NULLIF(COUNT(*),0) * 100, 1) AS rate_30d
+        FROM retention_checks
+        WHERE check_7d IS NOT NULL
+        GROUP BY invite_code
+        ORDER BY rate_7d DESC
+    """)
+
+
+# ─────────────────────────────────────────────────────────
 # ダッシュボード統計
 # ─────────────────────────────────────────────────────────
 
@@ -283,6 +423,51 @@ def get_dashboard_stats() -> dict:
         "total_users": total_users, "active_users": active_users,
         "active_rate": active_rate, "total_messages": total_messages,
         "total_punishments": total_punishments,
+    }
+
+def get_weekly_stats() -> dict:
+    """定期レポート用週次統計"""
+    joins = (_execute("""
+        SELECT COUNT(*) AS c FROM join_logs
+        WHERE joined_at >= (NOW() - INTERVAL '7 days')::TEXT
+    """) or [{"c":0}])[0]["c"] or 0
+
+    leaves = (_execute("""
+        SELECT COUNT(*) AS c FROM join_logs
+        WHERE left_at >= (NOW() - INTERVAL '7 days')::TEXT
+        AND left_at IS NOT NULL
+    """) or [{"c":0}])[0]["c"] or 0
+
+    instant = (_execute("""
+        SELECT COUNT(*) AS c FROM join_logs
+        WHERE joined_at >= (NOW() - INTERVAL '7 days')::TEXT
+        AND left_at IS NOT NULL
+        AND (left_at::timestamp - joined_at::timestamp) < INTERVAL '24 hours'
+    """) or [{"c":0}])[0]["c"] or 0
+
+    messages = (_execute("""
+        SELECT COUNT(*) AS c FROM activity_logs
+        WHERE sent_at >= (NOW() - INTERVAL '7 days')::TEXT
+    """) or [{"c":0}])[0]["c"] or 0
+
+    punishments = (_execute("""
+        SELECT COUNT(*) AS c FROM punishments
+        WHERE executed_at >= (NOW() - INTERVAL '7 days')::TEXT
+    """) or [{"c":0}])[0]["c"] or 0
+
+    top_channels = _execute("""
+        SELECT channel_id, COUNT(*) AS cnt
+        FROM activity_logs
+        WHERE sent_at >= (NOW() - INTERVAL '7 days')::TEXT
+        GROUP BY channel_id
+        ORDER BY cnt DESC
+        LIMIT 3
+    """)
+
+    return {
+        "joins": joins, "leaves": leaves, "instant_leaves": instant,
+        "messages": messages, "punishments": punishments,
+        "top_channels": top_channels,
     }
 
 

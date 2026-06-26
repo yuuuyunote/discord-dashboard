@@ -1,7 +1,6 @@
 """
 bot_only.py
 Wispbyte用 Discord Bot のみ起動スクリプト
-FastAPIは起動しない・Botイベント処理のみ
 """
 
 import asyncio
@@ -12,13 +11,12 @@ from dotenv import load_dotenv
 
 import database
 from bot.events import setup_events
+from bot.commands import setup_commands
 
-# ─── 環境変数読み込み ──────────────────────────────────────
-load_dotenv()
+load_dotenv(dotenv_path="/home/container/.env")
 
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN", "")
-
-# ─── Discord Bot セットアップ ──────────────────────────────
+GUILD_ID      = int(os.getenv("GUILD_ID", "0"))
 
 intents = discord.Intents.default()
 intents.members         = True
@@ -28,17 +26,36 @@ intents.moderation      = True
 
 bot = discord.Client(intents=intents)
 setup_events(bot)
+tree = setup_commands(bot)
 
 
-# ─── 起動エントリーポイント ────────────────────────────────
+@bot.event
+async def on_ready_sync():
+    pass
+
+
+# スラッシュコマンドを同期するためon_readyをラップ
+_original_on_ready = bot.event.__self__ if hasattr(bot.event, '__self__') else None
+
+
+async def _sync_commands():
+    await bot.wait_until_ready()
+    try:
+        guild = discord.Object(id=GUILD_ID)
+        tree.copy_global_to(guild=guild)
+        synced = await tree.sync(guild=guild)
+        print(f"[Bot] スラッシュコマンド同期完了: {len(synced)}件")
+    except Exception as e:
+        print(f"[Bot] スラッシュコマンド同期エラー: {e}")
+
 
 async def main() -> None:
-    # DB初期化（テーブルが無ければ作成）
     database.init_db()
     print("[Bot] DB初期化完了")
 
-    # Botのみ起動
-    await bot.start(DISCORD_TOKEN)
+    async with bot:
+        bot.loop.create_task(_sync_commands())
+        await bot.start(DISCORD_TOKEN)
 
 
 if __name__ == "__main__":
