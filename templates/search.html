@@ -8,261 +8,70 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
   <style>
     .dash-layout { display: flex; min-height: 100vh; padding-top: var(--nav-h); }
-
-    .sidebar {
-      width: 220px;
-      flex-shrink: 0;
-      border-right: 1px solid var(--border);
-      padding: 32px 0;
-      position: fixed;
-      top: var(--nav-h);
-      left: 0;
-      bottom: 0;
-      overflow-y: auto;
-      background: var(--bg-card);
-      transition: background var(--transition), border-color var(--transition);
-    }
-    .sidebar-label {
-      font-family: 'DM Mono', monospace;
-      font-size: 10px;
-      letter-spacing: 0.12em;
-      text-transform: uppercase;
-      color: var(--text-sub);
-      padding: 0 20px;
-      margin-bottom: 8px;
-    }
+    .sidebar { width: 220px; flex-shrink: 0; border-right: 1px solid var(--border); padding: 32px 0; position: fixed; top: var(--nav-h); left: 0; bottom: 0; overflow-y: auto; background: var(--bg-card); }
+    .sidebar-label { font-family: 'DM Mono', monospace; font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-sub); padding: 0 20px; margin-bottom: 8px; }
     .sidebar-nav { display: flex; flex-direction: column; gap: 2px; padding: 0 12px; }
-    .sidebar-nav a {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      padding: 10px 12px;
-      border-radius: var(--radius-sm);
-      font-size: 14px;
-      font-weight: 500;
-      color: var(--text-sub);
-      transition: all var(--transition);
-      text-decoration: none;
-    }
+    .sidebar-nav a { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: var(--radius-sm); font-size: 14px; font-weight: 500; color: var(--text-sub); transition: all var(--transition); text-decoration: none; }
     .sidebar-nav a:hover { color: var(--text); background: var(--border); }
     .sidebar-nav a.active { color: var(--accent); background: var(--accent-light); }
     .sidebar-nav a i { width: 16px; text-align: center; font-size: 13px; }
     .sidebar-divider { border: none; border-top: 1px solid var(--border); margin: 16px 20px; }
-
-    .main-content {
-      margin-left: 220px;
-      flex: 1;
-      padding: 40px 40px;
-      max-width: calc(100% - 220px);
-    }
-
-    .nav-top {
-      position: fixed;
-      top: 0; left: 0; right: 0;
-      height: var(--nav-h);
-      background: var(--bg-nav);
-      backdrop-filter: blur(12px) saturate(160%);
-      border-bottom: 1px solid var(--border);
-      z-index: 1000;
-      display: flex;
-      align-items: center;
-      padding: 0 32px;
-      gap: 16px;
-    }
-    .nav-top-logo {
-      font-family: 'DM Mono', monospace;
-      font-size: 13px;
-      font-weight: 500;
-      color: var(--accent);
-      letter-spacing: 0.04em;
-      flex: 1;
-    }
-    .nav-top-user {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      font-size: 13px;
-      color: var(--text-sub);
-    }
+    .main-content { margin-left: 220px; flex: 1; padding: 40px; max-width: calc(100% - 220px); }
+    .nav-top { position: fixed; top: 0; left: 0; right: 0; height: var(--nav-h); background: var(--bg-nav); backdrop-filter: blur(12px) saturate(160%); border-bottom: 1px solid var(--border); z-index: 1000; display: flex; align-items: center; padding: 0 32px; gap: 16px; }
+    .nav-top-logo { font-family: 'DM Mono', monospace; font-size: 13px; font-weight: 500; color: var(--accent); flex: 1; }
+    .nav-top-user { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--text-sub); }
     .nav-top-avatar { width: 28px; height: 28px; border-radius: 50%; overflow: hidden; background: var(--border); }
     .nav-top-avatar img { width: 100%; height: 100%; object-fit: cover; }
-
     .page-header { margin-bottom: 32px; }
-    .page-header-label {
-      font-family: 'DM Mono', monospace;
-      font-size: 10px;
-      letter-spacing: 0.12em;
-      text-transform: uppercase;
-      color: var(--accent);
-      margin-bottom: 6px;
-    }
+    .page-header-label { font-family: 'DM Mono', monospace; font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent); margin-bottom: 6px; }
     .page-header h1 { font-family: 'DM Serif Display', serif; font-size: 28px; color: var(--text); }
     .page-header p { font-size: 13px; color: var(--text-sub); margin-top: 4px; }
-
-    /* 検索バー */
-    .search-bar {
-      display: flex;
-      gap: 10px;
-      margin-bottom: 32px;
-    }
-    .search-input {
-      flex: 1;
-      padding: 12px 18px;
-      border-radius: var(--radius-sm);
-      border: 1px solid var(--border);
-      background: var(--bg-card);
-      color: var(--text);
-      font-size: 14px;
-      font-family: 'Noto Sans JP', sans-serif;
-      transition: border-color var(--transition);
-    }
+    .search-bar { display: flex; gap: 10px; margin-bottom: 32px; }
+    .search-input { flex: 1; padding: 12px 18px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--bg-card); color: var(--text); font-size: 14px; font-family: 'Noto Sans JP', sans-serif; transition: border-color var(--transition); }
     .search-input:focus { outline: none; border-color: var(--accent); }
     .search-input::placeholder { color: var(--text-sub); }
-
-    /* 複数ヒット一覧 */
     .user-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 24px; }
-    .user-list-item {
-      display: flex;
-      align-items: center;
-      gap: 14px;
-      padding: 14px 18px;
-      border-radius: var(--radius-sm);
-      border: 1px solid var(--border);
-      background: var(--bg-card);
-      color: var(--text);
-      text-decoration: none;
-      transition: all var(--transition);
-      font-size: 14px;
-    }
-    .user-list-item:hover {
-      border-color: var(--accent);
-      background: var(--accent-light);
-      transform: translateX(4px);
-    }
+    .user-list-item { display: flex; align-items: center; gap: 14px; padding: 14px 18px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--bg-card); color: var(--text); text-decoration: none; transition: all var(--transition); font-size: 14px; }
+    .user-list-item:hover { border-color: var(--accent); background: var(--accent-light); transform: translateX(4px); }
     .user-list-item i { color: var(--accent); width: 16px; text-align: center; }
-
-    /* ユーザー詳細 */
-    .user-detail-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 20px;
-      margin-bottom: 24px;
-    }
+    .user-detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 24px; }
     .detail-card { padding: 24px; }
-    .detail-label {
-      font-family: 'DM Mono', monospace;
-      font-size: 10px;
-      letter-spacing: 0.1em;
-      text-transform: uppercase;
-      color: var(--text-sub);
-      margin-bottom: 12px;
-      display: flex;
-      align-items: center;
-      gap: 6px;
-    }
+    .detail-label { font-family: 'DM Mono', monospace; font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-sub); margin-bottom: 12px; display: flex; align-items: center; gap: 6px; }
     .detail-label i { color: var(--accent); }
-    .detail-row {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 8px 0;
-      border-bottom: 1px solid var(--border);
-      font-size: 13px;
-    }
+    .detail-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
     .detail-row:last-child { border-bottom: none; }
     .detail-key { color: var(--text-sub); }
     .detail-val { color: var(--text); font-weight: 500; text-align: right; max-width: 60%; word-break: break-all; }
-
-    /* バッジ */
-    .badge {
-      display: inline-flex;
-      align-items: center;
-      padding: 2px 8px;
-      border-radius: 100px;
-      font-family: 'DM Mono', monospace;
-      font-size: 11px;
-      font-weight: 500;
-    }
-    .badge-green  { background: var(--accent-light); color: var(--accent); }
-    .badge-red    { background: rgba(220,60,60,0.12); color: #e06060; }
-    .badge-gray   { background: var(--border); color: var(--text-sub); }
+    .badge { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 100px; font-family: 'DM Mono', monospace; font-size: 11px; font-weight: 500; }
+    .badge-green { background: var(--accent-light); color: var(--accent); }
+    .badge-red { background: rgba(220,60,60,0.12); color: #e06060; }
+    .badge-gray { background: var(--border); color: var(--text-sub); }
     .badge-orange { background: rgba(220,140,40,0.12); color: #e08830; }
-
-    /* ロールタグ */
     .role-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
-    .role-tag {
-      padding: 3px 10px;
-      border-radius: 100px;
-      background: var(--accent-light);
-      color: var(--accent);
-      font-size: 12px;
-      font-weight: 500;
-    }
-
-    /* テーブル */
+    .role-tag { padding: 3px 10px; border-radius: 100px; background: var(--accent-light); color: var(--accent); font-size: 12px; font-weight: 500; }
     .data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-    .data-table th {
-      font-family: 'DM Mono', monospace;
-      font-size: 10px;
-      letter-spacing: 0.1em;
-      text-transform: uppercase;
-      color: var(--text-sub);
-      padding: 10px 16px;
-      text-align: left;
-      border-bottom: 1px solid var(--border);
-    }
-    .data-table td {
-      padding: 12px 16px;
-      border-bottom: 1px solid var(--border);
-      color: var(--text);
-      vertical-align: top;
-    }
+    .data-table th { font-family: 'DM Mono', monospace; font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-sub); padding: 10px 16px; text-align: left; border-bottom: 1px solid var(--border); }
+    .data-table td { padding: 12px 16px; border-bottom: 1px solid var(--border); color: var(--text); vertical-align: top; }
     .data-table tr:last-child td { border-bottom: none; }
     .data-table tr:hover td { background: var(--accent-light); }
-
-    /* 警告フォーム */
-    .warn-form { display: flex; flex-direction: column; gap: 10px; }
-    .warn-textarea {
-      width: 100%;
-      padding: 10px 14px;
-      border-radius: var(--radius-sm);
-      border: 1px solid var(--border);
-      background: var(--bg);
-      color: var(--text);
-      font-size: 13px;
-      font-family: 'Noto Sans JP', sans-serif;
-      resize: vertical;
-      min-height: 72px;
-      transition: border-color var(--transition);
-    }
-    .warn-textarea:focus { outline: none; border-color: var(--accent); }
-    .section-head {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 16px;
-    }
+    .section-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
     .section-head h2 { font-family: 'DM Serif Display', serif; font-size: 20px; color: var(--text); }
 
-    /* トースト */
-    .toast {
-      position: fixed;
-      bottom: 24px;
-      right: 24px;
-      padding: 12px 20px;
-      border-radius: var(--radius-sm);
-      background: var(--accent);
-      color: #fff;
-      font-size: 13px;
-      font-weight: 500;
-      opacity: 0;
-      transform: translateY(8px);
-      transition: all 0.3s ease;
-      pointer-events: none;
-      z-index: 9999;
-    }
+    /* ノートUI */
+    .note-list { display: flex; flex-direction: column; gap: 10px; margin-bottom: 16px; }
+    .note-item { padding: 12px 16px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--bg); font-size: 13px; }
+    .note-item-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+    .note-item-meta { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--text-sub); }
+    .note-delete-btn { background: none; border: none; color: var(--text-sub); cursor: pointer; font-size: 12px; padding: 2px 6px; border-radius: 4px; transition: color var(--transition); }
+    .note-delete-btn:hover { color: #e06060; }
+    .note-content { color: var(--text); line-height: 1.6; }
+    .note-add-area { display: flex; flex-direction: column; gap: 8px; }
+    .note-textarea { width: 100%; padding: 10px 14px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--bg); color: var(--text); font-size: 13px; font-family: 'Noto Sans JP', sans-serif; resize: vertical; min-height: 72px; transition: border-color var(--transition); box-sizing: border-box; }
+    .note-textarea:focus { outline: none; border-color: var(--accent); }
+    .warn-textarea { width: 100%; padding: 10px 14px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--bg); color: var(--text); font-size: 13px; font-family: 'Noto Sans JP', sans-serif; resize: vertical; min-height: 72px; transition: border-color var(--transition); box-sizing: border-box; }
+    .warn-textarea:focus { outline: none; border-color: var(--accent); }
+    .toast { position: fixed; bottom: 24px; right: 24px; padding: 12px 20px; border-radius: var(--radius-sm); background: var(--accent); color: #fff; font-size: 13px; font-weight: 500; opacity: 0; transform: translateY(8px); transition: all 0.3s ease; pointer-events: none; z-index: 9999; }
     .toast.show { opacity: 1; transform: translateY(0); }
-
     @media (max-width: 900px) {
       .user-detail-grid { grid-template-columns: 1fr; }
       .sidebar { display: none; }
@@ -271,18 +80,12 @@
   </style>
 </head>
 <body>
-
-  <!-- トップナビ -->
   <nav class="nav-top">
-    <span class="nav-top-logo">
-      <i class="fa-solid fa-terminal"></i> Guide Base + / Dashboard
-    </span>
+    <span class="nav-top-logo"><i class="fa-solid fa-terminal"></i> Guide Base + / Dashboard</span>
     <label class="theme-toggle" title="テーマ切替">
       <input type="checkbox" id="themeChk">
       <span class="theme-toggle-track"></span>
-      <span class="theme-toggle-thumb">
-        <span id="themeIcon">☀️</span>
-      </span>
+      <span class="theme-toggle-thumb"><span id="themeIcon">☀️</span></span>
     </label>
     <div class="nav-top-user">
       {% if session.avatar %}
@@ -291,125 +94,69 @@
       </div>
       {% endif %}
       {{ session.username }}
-      <a href="/logout" style="color:var(--text-sub); font-size:12px; margin-left:8px;">
-        <i class="fa-solid fa-right-from-bracket"></i>
-      </a>
+      <a href="/logout" style="color:var(--text-sub); font-size:12px; margin-left:8px;"><i class="fa-solid fa-right-from-bracket"></i></a>
     </div>
   </nav>
 
   <div class="dash-layout">
-
-    <!-- サイドバー -->
     <aside class="sidebar">
       <div class="sidebar-label">Navigation</div>
       <nav class="sidebar-nav">
-        <a href="/dashboard">
-          <i class="fa-solid fa-chart-line"></i> ダッシュボード
-        </a>
-        <a href="/search" class="active">
-          <i class="fa-solid fa-magnifying-glass"></i> ユーザー検索
-        </a>
+        <a href="/dashboard"><i class="fa-solid fa-chart-line"></i> ダッシュボード</a>
+        <a href="/search" class="active"><i class="fa-solid fa-magnifying-glass"></i> ユーザー検索</a>
+        <a href="/retention"><i class="fa-solid fa-chart-pie"></i> 定着率レポート</a>
       </nav>
       <hr class="sidebar-divider">
       <div class="sidebar-label">Export</div>
       <nav class="sidebar-nav">
-        <a href="/api/csv/users" target="_blank">
-          <i class="fa-solid fa-file-csv"></i> ユーザーCSV
-        </a>
-        <a href="/api/csv/punishments" target="_blank">
-          <i class="fa-solid fa-file-csv"></i> 処罰履歴CSV
-        </a>
-        <a href="/api/csv/invites" target="_blank">
-          <i class="fa-solid fa-file-csv"></i> 招待リンクCSV
-        </a>
+        <a href="/api/csv/users" target="_blank"><i class="fa-solid fa-file-csv"></i> ユーザーCSV</a>
+        <a href="/api/csv/punishments" target="_blank"><i class="fa-solid fa-file-csv"></i> 処罰履歴CSV</a>
+        <a href="/api/csv/invites" target="_blank"><i class="fa-solid fa-file-csv"></i> 招待リンクCSV</a>
       </nav>
     </aside>
 
-    <!-- メイン -->
     <main class="main-content">
-
       <div class="page-header fade-up">
         <div class="page-header-label">User Search</div>
         <h1>ユーザー検索</h1>
         <p>ユーザーID またはユーザー名で検索できます</p>
       </div>
 
-      <!-- 検索フォーム -->
       <form class="search-bar fade-up" method="get" action="/search">
-        <input
-          class="search-input"
-          type="text"
-          name="q"
-          value="{{ query }}"
-          placeholder="ユーザーID または ユーザー名を入力..."
-          autofocus
-        >
-        <button type="submit" class="btn btn-primary">
-          <i class="fa-solid fa-magnifying-glass"></i> 検索
-        </button>
+        <input class="search-input" type="text" name="q" value="{{ query }}" placeholder="ユーザーID または ユーザー名を入力..." autofocus>
+        <button type="submit" class="btn btn-primary"><i class="fa-solid fa-magnifying-glass"></i> 検索</button>
       </form>
 
-      <!-- 複数ヒット一覧 -->
       {% if users and not target_user %}
       <div class="fade-up">
-        <p style="font-size:13px; color:var(--text-sub); margin-bottom:12px;">
-          {{ users|length }} 件ヒットしました。ユーザーを選択してください。
-        </p>
+        <p style="font-size:13px; color:var(--text-sub); margin-bottom:12px;">{{ users|length }} 件ヒット。ユーザーを選択してください。</p>
         <div class="user-list">
           {% for u in users %}
           <a href="/search?q={{ u.user_id }}" class="user-list-item">
             <i class="fa-solid fa-user"></i>
             <span>{{ u.username }}</span>
-            <span style="font-family:'DM Mono',monospace; font-size:11px; color:var(--text-sub);">
-              {{ u.user_id }}
-            </span>
-            <span style="margin-left:auto; font-size:11px; color:var(--text-sub);">
-              参加: {{ u.joined_at[:10] if u.joined_at else '不明' }}
-            </span>
+            <span style="font-family:'DM Mono',monospace; font-size:11px; color:var(--text-sub);">{{ u.user_id }}</span>
+            <span style="margin-left:auto; font-size:11px; color:var(--text-sub);">参加: {{ u.joined_at[:10] if u.joined_at else '不明' }}</span>
           </a>
           {% endfor %}
         </div>
       </div>
       {% endif %}
 
-      <!-- ユーザー詳細 -->
       {% if target_user %}
       <div class="fade-up">
 
-        <!-- 基本情報 & 参加情報 -->
         <div class="user-detail-grid">
-
           <div class="card detail-card">
             <div class="detail-label"><i class="fa-solid fa-user"></i> 基本情報</div>
-            <div class="detail-row">
-              <span class="detail-key">ユーザー名</span>
-              <span class="detail-val">{{ target_user.username }}</span>
-            </div>
-            <div class="detail-row">
-              <span class="detail-key">ユーザーID</span>
-              <span class="detail-val" style="font-family:'DM Mono',monospace; font-size:11px;">
-                {{ target_user.user_id }}
-              </span>
-            </div>
-            <div class="detail-row">
-              <span class="detail-key">アカウント作成</span>
-              <span class="detail-val">{{ target_user.account_created[:10] }}</span>
-            </div>
-            <div class="detail-row">
-              <span class="detail-key">サーバー参加</span>
-              <span class="detail-val">{{ target_user.joined_at[:10] if target_user.joined_at else '不明' }}</span>
-            </div>
-            <div class="detail-row">
-              <span class="detail-key">発言数</span>
-              <span class="detail-val">{{ "{:,}".format(target_user.message_count) }} 件</span>
-            </div>
+            <div class="detail-row"><span class="detail-key">ユーザー名</span><span class="detail-val">{{ target_user.username }}</span></div>
+            <div class="detail-row"><span class="detail-key">ユーザーID</span><span class="detail-val" style="font-family:'DM Mono',monospace; font-size:11px;">{{ target_user.user_id }}</span></div>
+            <div class="detail-row"><span class="detail-key">アカウント作成</span><span class="detail-val">{{ target_user.account_created[:10] }}</span></div>
+            <div class="detail-row"><span class="detail-key">サーバー参加</span><span class="detail-val">{{ target_user.joined_at[:10] if target_user.joined_at else '不明' }}</span></div>
+            <div class="detail-row"><span class="detail-key">発言数</span><span class="detail-val">{{ "{:,}".format(target_user.message_count) }} 件</span></div>
             <div class="detail-row">
               <span class="detail-key">VC時間</span>
-              <span class="detail-val">
-                {% set h = (target_user.vc_seconds // 3600) %}
-                {% set m = ((target_user.vc_seconds % 3600) // 60) %}
-                {{ h }}h {{ m }}m
-              </span>
+              <span class="detail-val">{{ target_user.vc_seconds // 3600 }}h {{ (target_user.vc_seconds % 3600) // 60 }}m</span>
             </div>
           </div>
 
@@ -419,90 +166,61 @@
               <span class="detail-key">使用招待コード</span>
               <span class="detail-val" style="font-family:'DM Mono',monospace; color:var(--accent);">
                 {% if join_log and join_log.invite_code %}
-                  {{ join_log.invite_code }}
-                {% else %}
-                  不明
-                {% endif %}
+                  <a href="/invite/{{ join_log.invite_code }}" style="color:var(--accent);">{{ join_log.invite_code }}</a>
+                {% else %}不明{% endif %}
               </span>
             </div>
             <div class="detail-row">
               <span class="detail-key">入室日時</span>
-              <span class="detail-val">
-                {{ join_log.joined_at[:16].replace('T',' ') if join_log else '不明' }}
-              </span>
+              <span class="detail-val">{{ join_log.joined_at[:16].replace('T',' ') if join_log else '不明' }}</span>
             </div>
             <div class="detail-row">
               <span class="detail-key">退室日時</span>
               <span class="detail-val">
-                {% if join_log and join_log.left_at %}
-                  {{ join_log.left_at[:16].replace('T',' ') }}
-                {% else %}
-                  <span class="badge badge-green">在籍中</span>
-                {% endif %}
+                {% if join_log and join_log.left_at %}{{ join_log.left_at[:16].replace('T',' ') }}
+                {% else %}<span class="badge badge-green">在籍中</span>{% endif %}
               </span>
             </div>
-            <div style="margin-top: 14px;">
+            <div style="margin-top:14px;">
               <div class="detail-label" style="margin-bottom:8px;"><i class="fa-solid fa-tag"></i> 現在のロール</div>
               <div class="role-tags">
-                {% if live_roles %}
-                  {% for r in live_roles %}
-                  <span class="role-tag">{{ r }}</span>
-                  {% endfor %}
-                {% else %}
-                  <span style="font-size:12px; color:var(--text-sub);">取得不可（オフラインまたはキャッシュなし）</span>
-                {% endif %}
+                {% if live_roles %}{% for r in live_roles %}<span class="role-tag">{{ r }}</span>{% endfor %}
+                {% else %}<span style="font-size:12px; color:var(--text-sub);">取得不可</span>{% endif %}
               </div>
             </div>
             {% if target_user.initial_roles %}
-            <div style="margin-top: 14px;">
+            <div style="margin-top:14px;">
               <div class="detail-label" style="margin-bottom:8px;"><i class="fa-solid fa-clock-rotate-left"></i> 入室10分後ロール</div>
               <div class="role-tags">
-                {% for r in target_user.initial_roles %}
-                <span class="role-tag" style="opacity:0.7;">{{ r }}</span>
-                {% endfor %}
+                {% for r in target_user.initial_roles %}<span class="role-tag" style="opacity:0.7;">{{ r }}</span>{% endfor %}
               </div>
             </div>
             {% endif %}
           </div>
-
         </div>
 
         <!-- 処罰履歴 -->
-        <div class="card fade-up" style="margin-bottom: 24px;">
-          <div style="padding: 24px;">
+        <div class="card fade-up" style="margin-bottom:24px;">
+          <div style="padding:24px;">
             <div class="section-head">
               <h2>処罰・警告履歴</h2>
               <span class="badge badge-gray">{{ punishments|length }} 件</span>
             </div>
             {% if punishments %}
             <table class="data-table">
-              <thead>
-                <tr>
-                  <th>種別</th>
-                  <th>実行者</th>
-                  <th>理由</th>
-                  <th>日時</th>
-                </tr>
-              </thead>
+              <thead><tr><th>種別</th><th>実行者</th><th>理由</th><th>日時</th></tr></thead>
               <tbody>
                 {% for p in punishments %}
                 <tr>
                   <td>
-                    {% if p.punishment_type == 'BAN' %}
-                      <span class="badge badge-red">BAN</span>
-                    {% elif p.punishment_type == 'KICK' %}
-                      <span class="badge badge-orange">KICK</span>
-                    {% elif p.punishment_type == 'TIMEOUT' %}
-                      <span class="badge badge-gray">TIMEOUT</span>
-                    {% else %}
-                      <span class="badge badge-green">WARN</span>
-                    {% endif %}
+                    {% if p.punishment_type == 'BAN' %}<span class="badge badge-red">BAN</span>
+                    {% elif p.punishment_type == 'KICK' %}<span class="badge badge-orange">KICK</span>
+                    {% elif p.punishment_type == 'TIMEOUT' %}<span class="badge badge-gray">TIMEOUT</span>
+                    {% else %}<span class="badge badge-green">WARN</span>{% endif %}
                   </td>
                   <td style="color:var(--text-sub);">{{ p.executor }}</td>
                   <td>{{ p.reason or '—' }}</td>
-                  <td style="font-family:'DM Mono',monospace; font-size:11px; color:var(--text-sub); white-space:nowrap;">
-                    {{ p.executed_at[:16].replace('T',' ') }}
-                  </td>
+                  <td style="font-family:'DM Mono',monospace; font-size:11px; color:var(--text-sub); white-space:nowrap;">{{ p.executed_at[:16].replace('T',' ') }}</td>
                 </tr>
                 {% endfor %}
               </tbody>
@@ -513,25 +231,47 @@
           </div>
         </div>
 
-        <!-- 手動警告メモ追記フォーム -->
-        <div class="card fade-up">
-          <div style="padding: 24px;">
-            <div class="section-head">
-              <h2>手動警告メモを追記</h2>
-            </div>
-            <div class="warn-form" id="warnForm">
-              <textarea
-                class="warn-textarea"
-                id="warnReason"
-                placeholder="警告内容・メモを入力してください..."
-                maxlength="500"
-              ></textarea>
-              <button
-                class="btn btn-primary"
-                style="align-self: flex-start;"
-                onclick="submitWarn('{{ target_user.user_id }}', '{{ target_user.username|replace("'", "\\'") }}')"
-              >
+        <!-- 手動警告 -->
+        <div class="card fade-up" style="margin-bottom:24px;">
+          <div style="padding:24px;">
+            <div class="section-head"><h2>手動警告を記録</h2></div>
+            <div style="display:flex; flex-direction:column; gap:8px;">
+              <textarea class="warn-textarea" id="warnReason" placeholder="警告内容を入力..." maxlength="500"></textarea>
+              <button class="btn btn-primary" style="align-self:flex-start;" onclick="submitWarn('{{ target_user.user_id }}', '{{ target_user.username|replace("'", "\\'") }}')">
                 <i class="fa-solid fa-triangle-exclamation"></i> 警告を記録
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- ノート -->
+        <div class="card fade-up">
+          <div style="padding:24px;">
+            <div class="section-head">
+              <h2>運営ノート</h2>
+              <span class="badge badge-gray">{{ notes|length }} 件</span>
+            </div>
+
+            {% if notes %}
+            <div class="note-list">
+              {% for n in notes %}
+              <div class="note-item" id="note-{{ n.id }}">
+                <div class="note-item-header">
+                  <span class="note-item-meta">{{ n.author_name }} — {{ n.created_at[:16].replace('T',' ') }}</span>
+                  <button class="note-delete-btn" onclick="deleteNote({{ n.id }})">
+                    <i class="fa-solid fa-trash"></i>
+                  </button>
+                </div>
+                <div class="note-content">{{ n.content }}</div>
+              </div>
+              {% endfor %}
+            </div>
+            {% endif %}
+
+            <div class="note-add-area">
+              <textarea class="note-textarea" id="noteContent" placeholder="ノートを追記..." maxlength="1000"></textarea>
+              <button class="btn btn-outline" style="align-self:flex-start;" onclick="addNote('{{ target_user.user_id }}')">
+                <i class="fa-solid fa-plus"></i> ノートを追加
               </button>
             </div>
           </div>
@@ -540,18 +280,15 @@
       </div>
       {% endif %}
 
-      <!-- 検索前の初期状態 -->
       {% if not query %}
-      <div class="card fade-up" style="padding: 48px; text-align: center;">
+      <div class="card fade-up" style="padding:48px; text-align:center;">
         <i class="fa-solid fa-magnifying-glass" style="font-size:32px; color:var(--border); margin-bottom:16px; display:block;"></i>
-        <p style="color:var(--text-sub); font-size:14px;">
-          ユーザーIDまたはユーザー名を入力して検索してください
-        </p>
+        <p style="color:var(--text-sub); font-size:14px;">ユーザーIDまたはユーザー名を入力して検索してください</p>
       </div>
       {% endif %}
 
       {% if query and not users %}
-      <div class="card fade-up" style="padding: 48px; text-align: center;">
+      <div class="card fade-up" style="padding:48px; text-align:center;">
         <i class="fa-solid fa-user-slash" style="font-size:32px; color:var(--border); margin-bottom:16px; display:block;"></i>
         <p style="color:var(--text-sub); font-size:14px;">「{{ query }}」に一致するユーザーが見つかりませんでした</p>
       </div>
@@ -563,7 +300,6 @@
   <div class="toast" id="toast"></div>
 
   <script>
-    // テーマ
     const chk  = document.getElementById('themeChk');
     const icon = document.getElementById('themeIcon');
     const saved = localStorage.getItem('theme') || 'dark';
@@ -577,7 +313,6 @@
       icon.textContent = t === 'light' ? '🌙' : '☀️';
     });
 
-    // トースト
     function showToast(msg, ok = true) {
       const t = document.getElementById('toast');
       t.textContent = msg;
@@ -586,30 +321,53 @@
       setTimeout(() => t.classList.remove('show'), 2500);
     }
 
-    // 手動警告送信
     async function submitWarn(userId, username) {
       const reason = document.getElementById('warnReason').value.trim();
       if (!reason) { showToast('警告内容を入力してください', false); return; }
-
       const fd = new FormData();
       fd.append('user_id', userId);
       fd.append('target_name', username);
       fd.append('reason', reason);
-
       try {
         const res  = await fetch('/api/punishment/add', { method: 'POST', body: fd });
         const data = await res.json();
         if (data.ok) {
           showToast('警告を記録しました');
           document.getElementById('warnReason').value = '';
-          // 処罰履歴を更新するためページリロード
           setTimeout(() => location.reload(), 1200);
-        } else {
-          showToast('記録に失敗しました', false);
-        }
-      } catch {
-        showToast('通信エラー', false);
-      }
+        } else { showToast('記録に失敗しました', false); }
+      } catch { showToast('通信エラー', false); }
+    }
+
+    async function addNote(userId) {
+      const content = document.getElementById('noteContent').value.trim();
+      if (!content) { showToast('内容を入力してください', false); return; }
+      const fd = new FormData();
+      fd.append('user_id', userId);
+      fd.append('content', content);
+      try {
+        const res  = await fetch('/api/note/add', { method: 'POST', body: fd });
+        const data = await res.json();
+        if (data.ok) {
+          showToast('ノートを追加しました');
+          document.getElementById('noteContent').value = '';
+          setTimeout(() => location.reload(), 1000);
+        } else { showToast('追加に失敗しました', false); }
+      } catch { showToast('通信エラー', false); }
+    }
+
+    async function deleteNote(noteId) {
+      if (!confirm('このノートを削除しますか？')) return;
+      const fd = new FormData();
+      fd.append('note_id', noteId);
+      try {
+        const res  = await fetch('/api/note/delete', { method: 'POST', body: fd });
+        const data = await res.json();
+        if (data.ok) {
+          document.getElementById(`note-${noteId}`).remove();
+          showToast('ノートを削除しました');
+        } else { showToast('削除に失敗しました', false); }
+      } catch { showToast('通信エラー', false); }
     }
   </script>
 </body>
