@@ -117,9 +117,9 @@
                     </a>
                   </td>
                   <td style="font-family:'DM Mono',monospace; font-size:11px; color:var(--text-sub);">{{ m.user_id }}</td>
-                  <td style="font-family:'DM Mono',monospace; font-size:11px;">{{ m.joined_at[:16].replace('T',' ') }}</td>
+                  <td style="font-family:'DM Mono',monospace; font-size:11px;">{{ m.joined_at | jst }}</td>
                   <td style="font-family:'DM Mono',monospace; font-size:11px; color:var(--text-sub);">
-                    {{ m.left_at[:16].replace('T',' ') if m.left_at else '—' }}
+                    {{ m.left_at | jst if m.left_at else "—" }}
                   </td>
                   <td>
                     {% if m.instant_leave %}
