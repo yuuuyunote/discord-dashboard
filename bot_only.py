@@ -1,24 +1,49 @@
 """
 bot_only.py
 Wispbyte用 Discord Bot のみ起動スクリプト
-起動時に既存メンバーを自動インポート（初回のみ）
 """
 
 import asyncio
 import os
-from datetime import datetime, timezone
 
 import discord
-from dotenv import load_dotenv
 
+# .envファイルを明示的に読み込む（複数パスを試みる）
+def _load_env():
+    paths = [
+        "/home/container/.env",
+        ".env",
+        "/app/.env",
+    ]
+    for path in paths:
+        if os.path.exists(path):
+            with open(path) as f:
+                for line in f:
+                    line = line.strip()
+                    if not line or line.startswith("#") or "=" not in line:
+                        continue
+                    key, _, val = line.partition("=")
+                    key = key.strip()
+                    val = val.strip().strip('"').strip("'")
+                    if key and key not in os.environ:
+                        os.environ[key] = val
+            print(f"[Bot] .envを読み込みました: {path}")
+            return
+    print("[Bot] .envファイルが見つかりませんでした（環境変数を直接使用）")
+
+_load_env()
+
+# 環境変数を読み込んだ後にimport
 import database
 from bot.events import setup_events
 from bot.commands import setup_commands
 
-load_dotenv(dotenv_path="/home/container/.env")
+DISCORD_TOKEN = os.environ.get("DISCORD_TOKEN", "")
+GUILD_ID_STR  = os.environ.get("GUILD_ID", "0")
+GUILD_ID      = int(GUILD_ID_STR) if GUILD_ID_STR.isdigit() else 0
 
-DISCORD_TOKEN = os.getenv("DISCORD_TOKEN", "")
-GUILD_ID      = int(os.getenv("GUILD_ID", "0"))
+print(f"[Bot] GUILD_ID={GUILD_ID}")
+print(f"[Bot] TOKEN先頭6文字={DISCORD_TOKEN[:6] if DISCORD_TOKEN else 'なし'}")
 
 intents = discord.Intents.default()
 intents.members         = True
@@ -32,7 +57,6 @@ tree = setup_commands(bot)
 
 
 async def _import_existing_members(guild: discord.Guild) -> None:
-    """既存メンバーを一括インポート（DBに未登録のメンバーのみ）"""
     print("[Bot] 既存メンバーのインポートを開始...")
     count = 0
     skip  = 0
@@ -42,7 +66,6 @@ async def _import_existing_members(guild: discord.Guild) -> None:
             skip += 1
             continue
 
-        # 既にDBにいる場合はスキップ
         existing = database.get_user(str(member.id))
         if existing:
             skip += 1
@@ -73,12 +96,14 @@ async def _sync_commands() -> None:
         print(f"[Bot] スラッシュコマンド同期エラー: {e}")
 
 
-async def _on_ready_import() -> None:
-    """起動時に既存メンバーをインポート"""
+async def _on_ready_tasks() -> None:
     await bot.wait_until_ready()
     guild = bot.get_guild(GUILD_ID)
     if guild:
+        print(f"[Bot] ギルド取得成功: {guild.name}")
         await _import_existing_members(guild)
+    else:
+        print(f"[Bot] ギルド取得失敗: GUILD_ID={GUILD_ID}")
 
 
 async def main() -> None:
@@ -87,7 +112,7 @@ async def main() -> None:
 
     async with bot:
         bot.loop.create_task(_sync_commands())
-        bot.loop.create_task(_on_ready_import())
+        bot.loop.create_task(_on_ready_tasks())
         await bot.start(DISCORD_TOKEN)
 
 
