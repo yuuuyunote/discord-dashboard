@@ -1167,3 +1167,227 @@ ul { list-style: none; }
       .home-sublinks { gap: 16px; }
       .stat-num { font-size: 30px; }
     }
+
+/* ═══════════════════════════════════════════════════════
+   Dashboard Mobile Responsive Styles
+   ═══════════════════════════════════════════════════════ */
+
+/* ─── モバイルナビゲーション ─────────────────────────── */
+.dash-mobile-nav {
+  display: none;
+  position: fixed;
+  bottom: 0; left: 0; right: 0;
+  height: 60px;
+  background: var(--bg-card);
+  border-top: 1px solid var(--border);
+  z-index: 1000;
+  padding: 0 8px;
+  align-items: center;
+  justify-content: space-around;
+}
+
+.dash-mobile-nav a {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 8px 16px;
+  border-radius: var(--radius-sm);
+  color: var(--text-sub);
+  font-size: 10px;
+  font-family: 'DM Mono', monospace;
+  text-decoration: none;
+  transition: all var(--transition);
+  flex: 1;
+  text-align: center;
+}
+
+.dash-mobile-nav a i {
+  font-size: 18px;
+}
+
+.dash-mobile-nav a.active {
+  color: var(--accent);
+}
+
+.dash-mobile-nav a:hover {
+  color: var(--accent);
+  background: var(--accent-light);
+}
+
+/* ─── サイドバー モバイル対応 ────────────────────────── */
+@media (max-width: 768px) {
+
+  /* サイドバーを非表示 */
+  .sidebar {
+    display: none !important;
+  }
+
+  /* メインコンテンツをフル幅に */
+  .main-content {
+    margin-left: 0 !important;
+    max-width: 100% !important;
+    padding: 20px 16px 80px !important; /* 下部ナビ分の余白 */
+  }
+
+  /* モバイルナビ表示 */
+  .dash-mobile-nav {
+    display: flex;
+  }
+
+  /* ページヘッダー */
+  .page-header h1 {
+    font-size: 22px !important;
+  }
+
+  /* 統計グリッド：2列に */
+  .stats-grid-dash {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 10px !important;
+    margin-bottom: 20px !important;
+  }
+
+  .stat-card {
+    padding: 16px !important;
+  }
+
+  .stat-card-value {
+    font-size: 28px !important;
+  }
+
+  /* 2カラムを1カラムに */
+  .two-col {
+    grid-template-columns: 1fr !important;
+    gap: 16px !important;
+  }
+
+  /* カード内パディング縮小 */
+  .card-inner {
+    padding: 16px !important;
+  }
+
+  /* テーブルをスクロール可能に */
+  .data-table-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .data-table {
+    min-width: 500px;
+  }
+
+  /* 招待リンクテーブルはスクロール */
+  .invite-table-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    margin: 0 -16px;
+    padding: 0 16px;
+  }
+
+  /* メモフォームをスタック */
+  .memo-form {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 6px !important;
+  }
+
+  .memo-save-btn {
+    width: 100% !important;
+  }
+
+  /* 検索バー */
+  .search-bar {
+    flex-direction: column !important;
+    gap: 8px !important;
+  }
+
+  .search-bar .btn {
+    width: 100% !important;
+    justify-content: center !important;
+  }
+
+  /* ユーザー詳細グリッド：1カラムに */
+  .user-detail-grid {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+  }
+
+  /* チャンネルランキングバー */
+  .ch-bar-label {
+    width: 100px !important;
+    font-size: 12px !important;
+  }
+
+  /* セクションヘッド */
+  .section-head {
+    flex-wrap: wrap !important;
+    gap: 8px !important;
+  }
+
+  /* 定着率バー */
+  .rate-bar {
+    flex-wrap: wrap !important;
+    gap: 4px !important;
+  }
+
+  .rate-track {
+    min-width: 60px !important;
+  }
+
+  /* グラフの高さを縮小 */
+  .chart-wrap {
+    height: 150px !important;
+  }
+
+  /* stat-row（招待詳細） */
+  .stat-row {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 10px !important;
+  }
+
+  .stat-mini {
+    padding: 14px !important;
+  }
+
+  .stat-mini-value {
+    font-size: 22px !important;
+  }
+
+  /* ノートアイテム */
+  .note-item-header {
+    align-items: flex-start !important;
+  }
+
+  /* トースト位置 */
+  .toast {
+    bottom: 70px !important;
+    left: 16px !important;
+    right: 16px !important;
+    text-align: center !important;
+  }
+
+  /* ナビトップのユーザー名を短縮 */
+  .nav-top-user span {
+    display: none;
+  }
+
+  /* ナビトップのロゴを短縮 */
+  .nav-top-logo {
+    font-size: 11px !important;
+  }
+}
+
+/* ─── 超小型画面（375px以下） ────────────────────────── */
+@media (max-width: 375px) {
+  .stats-grid-dash {
+    grid-template-columns: 1fr !important;
+  }
+
+  .stat-row {
+    grid-template-columns: 1fr !important;
+  }
+
+  .main-content {
+    padding: 16px 12px 80px !important;
+  }
+}
