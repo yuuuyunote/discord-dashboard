@@ -208,10 +208,10 @@
             </div>
             {% if punishments %}
             <table class="data-table">
-              <thead><tr><th>種別</th><th>実行者</th><th>理由</th><th>日時</th></tr></thead>
+              <thead><tr><th>種別</th><th>実行者</th><th>理由</th><th>日時</th><th></th></tr></thead>
               <tbody>
                 {% for p in punishments %}
-                <tr>
+                <tr id="pun-{{ p.id }}">
                   <td>
                     {% if p.punishment_type == 'BAN' %}<span class="badge badge-red">BAN</span>
                     {% elif p.punishment_type == 'KICK' %}<span class="badge badge-orange">KICK</span>
@@ -221,6 +221,11 @@
                   <td style="color:var(--text-sub);">{{ p.executor }}</td>
                   <td>{{ p.reason or '—' }}</td>
                   <td style="font-family:'DM Mono',monospace; font-size:11px; color:var(--text-sub); white-space:nowrap;">{{ p.executed_at[:16].replace('T',' ') }}</td>
+                  <td>
+                    <button class="note-delete-btn" onclick="deletePunishment({{ p.id }})" title="誤検知として削除">
+                      <i class="fa-solid fa-trash"></i>
+                    </button>
+                  </td>
                 </tr>
                 {% endfor %}
               </tbody>
@@ -353,6 +358,20 @@
           document.getElementById('noteContent').value = '';
           setTimeout(() => location.reload(), 1000);
         } else { showToast('追加に失敗しました', false); }
+      } catch { showToast('通信エラー', false); }
+    }
+
+    async function deletePunishment(punId) {
+      if (!confirm('この処罰記録を削除しますか？（誤検知の場合のみ使用してください）')) return;
+      const fd = new FormData();
+      fd.append('punishment_id', punId);
+      try {
+        const res  = await fetch('/api/punishment/delete', { method: 'POST', body: fd });
+        const data = await res.json();
+        if (data.ok) {
+          document.getElementById(`pun-${punId}`).remove();
+          showToast('処罰記録を削除しました');
+        } else { showToast('削除に失敗しました', false); }
       } catch { showToast('通信エラー', false); }
     }
 
