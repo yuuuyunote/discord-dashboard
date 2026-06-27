@@ -1,1 +1,2 @@
-# discord-dashboard
+## discord-dashboard bot
+Guide Base + で使用中のbot。サーバーの品質向上のため、参加方法ごとに招待リンクを分けてそれぞれの招待リンクの質を調査中。ただし、ダッシュボードは運営しかログインできない。
