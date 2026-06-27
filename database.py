@@ -483,3 +483,7 @@ def get_all_punishments_for_csv() -> list[dict]:
 
 def get_all_invites_for_csv() -> list[dict]:
     return get_all_invites()
+
+
+def delete_punishment(punishment_id: int) -> None:
+    _execute("DELETE FROM punishments WHERE id=%s", (punishment_id,))
