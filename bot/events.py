@@ -1,10 +1,7 @@
 """
 bot/events.py
 全Botイベントハンドラ
-追加機能：
-- 初回発言ロール自動付与
-- 定期レポート（月曜朝9時）
-- 定着率チェック（7日・30日）
+改善：Wick等外部Bot処罰の確実な検知
 """
 
 import asyncio
@@ -21,7 +18,8 @@ MOD_ROLE_ID        = int(os.getenv("MOD_ROLE_ID", "0"))
 FIRST_MSG_ROLE_ID  = int(os.getenv("FIRST_MSG_ROLE_ID", "0"))
 REPORT_CHANNEL_ID  = int(os.getenv("REPORT_CHANNEL_ID", "0"))
 
-AUDIT_POLL_INTERVAL = 30
+# ポーリング間隔を15秒に短縮
+AUDIT_POLL_INTERVAL = 15
 
 _invite_cache: dict[str, int] = {}
 _last_audit_check: datetime = datetime.now(timezone.utc)
@@ -47,8 +45,6 @@ def _find_used_invite(before: dict[str, int], after: dict[str, int]) -> Optional
 
 
 def setup_events(bot: discord.Client) -> None:
-
-    # ── Bot 起動時 ──────────────────────────────────────
 
     @bot.event
     async def on_ready() -> None:
@@ -79,8 +75,6 @@ def setup_events(bot: discord.Client) -> None:
         bot.loop.create_task(_retention_checker(bot))
         print("[Bot] 全タスク起動完了")
 
-    # ── メンバー入室 ────────────────────────────────────
-
     @bot.event
     async def on_member_join(member: discord.Member) -> None:
         global _invite_cache
@@ -102,13 +96,10 @@ def setup_events(bot: discord.Client) -> None:
         _invite_cache = new_cache
 
         database.add_join_log(str(member.id), used_code, joined_at)
-
-        # 定着率チェック用レコード追加
         database.add_retention_check(str(member.id), used_code, joined_at)
 
         print(f"[Bot] 入室: {member} | 招待コード: {used_code or '不明'}")
 
-        # 10分後に初期ロール記録
         async def _record_initial_roles() -> None:
             await asyncio.sleep(600)
             try:
@@ -122,8 +113,6 @@ def setup_events(bot: discord.Client) -> None:
                 print(f"[Bot] 初期ロール記録エラー: {e}")
 
         bot.loop.create_task(_record_initial_roles())
-
-    # ── メンバー退室 ────────────────────────────────────
 
     @bot.event
     async def on_member_remove(member: discord.Member) -> None:
@@ -142,8 +131,6 @@ def setup_events(bot: discord.Client) -> None:
 
         print(f"[Bot] 退室: {member}")
 
-    # ── メッセージ送信 ──────────────────────────────────
-
     @bot.event
     async def on_message(message: discord.Message) -> None:
         if message.author.bot:
@@ -155,19 +142,17 @@ def setup_events(bot: discord.Client) -> None:
 
         user_id = str(message.author.id)
 
-        # アクティビティ記録
         database.add_activity_log(
             user_id=user_id,
             channel_id=str(message.channel.id),
             sent_at=_now_iso(),
         )
 
-        # 招待リンク別発言数更新
         log = database.get_join_log_by_user(user_id)
         if log and log.get("invite_code"):
             database.update_invite_activity(log["invite_code"], messages=1, vc_sec=0)
 
-        # ── 初回発言ロール自動付与 ──────────────────────
+        # 初回発言ロール自動付与
         if FIRST_MSG_ROLE_ID and not database.has_first_message(user_id):
             try:
                 guild  = message.guild
@@ -179,8 +164,6 @@ def setup_events(bot: discord.Client) -> None:
                     print(f"[Bot] 初回発言ロール付与: {member} → {role.name}")
             except Exception as e:
                 print(f"[Bot] 初回発言ロール付与エラー: {e}")
-
-    # ── VC 入退室 ────────────────────────────────────────
 
     @bot.event
     async def on_voice_state_update(
@@ -201,8 +184,6 @@ def setup_events(bot: discord.Client) -> None:
                 if log and log.get("invite_code"):
                     database.update_invite_activity(log["invite_code"], messages=0, vc_sec=vc_sec)
 
-    # ── 招待リンク作成・削除 ────────────────────────────
-
     @bot.event
     async def on_invite_create(invite: discord.Invite) -> None:
         if invite.guild is None or invite.guild.id != GUILD_ID:
@@ -211,26 +192,91 @@ def setup_events(bot: discord.Client) -> None:
         created_at = invite.created_at.isoformat() if invite.created_at else _now_iso()
         database.upsert_invite(invite.code, creator_id, created_at)
         _invite_cache[invite.code] = 0
-        print(f"[Bot] 招待リンク作成: {invite.code}")
 
     @bot.event
     async def on_invite_delete(invite: discord.Invite) -> None:
         _invite_cache.pop(invite.code, None)
-        print(f"[Bot] 招待リンク削除: {invite.code}")
+
+    # ── Wickのwarn検知（メッセージembedから取得） ──────────
+    @bot.event
+    async def on_message_wick_warn(message: discord.Message) -> None:
+        """Wickのwarnメッセージを検知してDBに記録"""
+        if not message.author.bot:
+            return
+        if not isinstance(message.guild, discord.Guild):
+            return
+        if message.guild.id != GUILD_ID:
+            return
+        if not message.embeds:
+            return
+
+        # WickのBot IDリスト（主要なもの）
+        WICK_BOT_IDS = [
+            536991182035746816,   # Wick
+            493428086768041995,   # Wick (old)
+        ]
+        if message.author.id not in WICK_BOT_IDS:
+            return
+
+        for embed in message.embeds:
+            title = (embed.title or "").lower()
+            desc  = (embed.description or "").lower()
+
+            if "warn" not in title and "warn" not in desc:
+                continue
+
+            # ターゲットユーザーIDを取得
+            target_id   = None
+            target_name = "不明"
+
+            for field in embed.fields:
+                fname = field.name.lower()
+                if "user" in fname or "member" in fname or "target" in fname:
+                    val = field.value
+                    # <@12345> 形式からIDを抽出
+                    import re
+                    match = re.search(r'<@!?(\d+)>', val)
+                    if match:
+                        target_id   = match.group(1)
+                        target_name = val
+                    elif val.strip().isdigit():
+                        target_id = val.strip()
+
+            if target_id is None:
+                continue
+
+            reason      = embed.description or ""
+            executed_at = _now_iso()
+            executor    = str(message.author)
+
+            # 重複チェック（10秒以内の同一ユーザーへのWARNはスキップ）
+            existing = database.get_punishments_by_user(target_id)
+            recent_warn = any(
+                p["punishment_type"] == "WARN" and
+                p["executor"] == executor and
+                (datetime.fromisoformat(executed_at) - datetime.fromisoformat(p["executed_at"])).total_seconds() < 10
+                for p in existing
+            )
+            if recent_warn:
+                continue
+
+            database.add_punishment(
+                user_id=target_id,
+                target_name=target_name,
+                punishment_type="WARN",
+                executor=executor,
+                reason=reason,
+                executed_at=executed_at,
+            )
+            print(f"[Bot] Wickwarn検知: 対象={target_name} | 理由={reason[:50]}")
 
 
 # ─────────────────────────────────────────────────────────
-# 監査ログポーリング（30秒ごと）
+# 監査ログポーリング（15秒ごと）
 # ─────────────────────────────────────────────────────────
 
 async def _audit_log_poller(bot: discord.Client) -> None:
     global _last_audit_check
-
-    ACTION_MAP = {
-        discord.AuditLogAction.ban:           "BAN",
-        discord.AuditLogAction.kick:          "KICK",
-        discord.AuditLogAction.member_update: "TIMEOUT",
-    }
 
     while not bot.is_closed():
         await asyncio.sleep(AUDIT_POLL_INTERVAL)
@@ -243,18 +289,50 @@ async def _audit_log_poller(bot: discord.Client) -> None:
             check_after       = _last_audit_check
             _last_audit_check = datetime.now(timezone.utc)
 
-            async for entry in guild.audit_logs(limit=50):
+            async for entry in guild.audit_logs(limit=100):
                 entry_time = entry.created_at.replace(tzinfo=timezone.utc)
                 if entry_time <= check_after:
                     break
 
                 action = entry.action
-                if action == discord.AuditLogAction.member_update:
-                    if "timed_out_until" not in str(entry.changes):
+
+                # ── BAN ──────────────────────────────────
+                if action == discord.AuditLogAction.ban:
+                    punishment_type = "BAN"
+
+                # ── KICK ─────────────────────────────────
+                elif action == discord.AuditLogAction.kick:
+                    punishment_type = "KICK"
+
+                # ── TIMEOUT ──────────────────────────────
+                elif action == discord.AuditLogAction.member_update:
+                    # changesをすべてチェックしてtimed_out_untilを探す
+                    is_timeout = False
+                    try:
+                        after_changes = entry.changes.after
+                        # after_changesのattributesを確認
+                        for attr in dir(after_changes):
+                            if attr == 'timed_out_until':
+                                val = getattr(after_changes, attr, None)
+                                if val is not None:
+                                    is_timeout = True
+                                    break
+                    except Exception:
+                        pass
+
+                    # 文字列チェックでも補完
+                    if not is_timeout:
+                        try:
+                            changes_str = str(entry.changes)
+                            if 'timed_out_until' in changes_str or 'timeout' in changes_str.lower():
+                                is_timeout = True
+                        except Exception:
+                            pass
+
+                    if not is_timeout:
                         continue
                     punishment_type = "TIMEOUT"
-                elif action in ACTION_MAP:
-                    punishment_type = ACTION_MAP[action]
+
                 else:
                     continue
 
@@ -263,27 +341,40 @@ async def _audit_log_poller(bot: discord.Client) -> None:
                     continue
 
                 target_id   = str(target.id)
-                target_name = str(target) if hasattr(target, "name") else str(target.id)
+                target_name = str(target) if hasattr(target, 'name') else str(target.id)
                 executor    = str(entry.user) if entry.user else "Unknown"
                 reason      = entry.reason or ""
                 executed_at = entry_time.isoformat()
 
+                # 重複チェック
                 existing = database.get_punishments_by_user(target_id)
                 already  = any(
-                    p["executed_at"] == executed_at and p["punishment_type"] == punishment_type
+                    p["executed_at"] == executed_at and
+                    p["punishment_type"] == punishment_type
                     for p in existing
                 )
                 if already:
                     continue
 
-                database.add_punishment(target_id, target_name, punishment_type, executor, reason, executed_at)
+                database.add_punishment(
+                    user_id=target_id,
+                    target_name=target_name,
+                    punishment_type=punishment_type,
+                    executor=executor,
+                    reason=reason,
+                    executed_at=executed_at,
+                )
 
+                # 運営メンバーなら実績カウント
                 if entry.user:
                     member = guild.get_member(entry.user.id)
                     if member and any(r.id == MOD_ROLE_ID for r in member.roles):
                         database.increment_mod_audit(str(entry.user.id))
 
-                print(f"[Bot] 処罰検知: {punishment_type} | 対象: {target_name} | 実行者: {executor}")
+                print(
+                    f"[Bot] 処罰検知: {punishment_type} | "
+                    f"対象: {target_name} | 実行者: {executor} | 理由: {reason[:30]}"
+                )
 
         except discord.Forbidden:
             print("[Bot] 警告: 監査ログの読み取り権限がありません")
@@ -296,19 +387,15 @@ async def _audit_log_poller(bot: discord.Client) -> None:
 # ─────────────────────────────────────────────────────────
 
 async def _weekly_report_scheduler(bot: discord.Client) -> None:
-    """毎週月曜の9:00 JST（0:00 UTC）にレポートを送信"""
     while not bot.is_closed():
         now = datetime.now(timezone.utc)
-        # 次の月曜0:00 UTCを計算
         days_until_monday = (7 - now.weekday()) % 7
         if days_until_monday == 0 and now.hour >= 0:
             days_until_monday = 7
-        next_monday = now.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=days_until_monday)
+        next_monday  = now.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=days_until_monday)
         wait_seconds = (next_monday - now).total_seconds()
-
         print(f"[Bot] 次回レポート送信まで: {int(wait_seconds // 3600)}時間")
         await asyncio.sleep(wait_seconds)
-
         await _send_weekly_report(bot)
 
 
@@ -320,13 +407,12 @@ async def _send_weekly_report(bot: discord.Client) -> None:
         return
 
     try:
-        stats = database.get_weekly_stats()
+        stats        = database.get_weekly_stats()
         member_count = guild.member_count if guild else "不明"
 
-        # チャンネル名解決
         top_ch_lines = []
         for i, ch in enumerate(stats["top_channels"], 1):
-            ch_obj = bot.get_channel(int(ch["channel_id"])) if guild else None
+            ch_obj  = bot.get_channel(int(ch["channel_id"])) if guild else None
             ch_name = f"#{ch_obj.name}" if ch_obj else ch["channel_id"]
             top_ch_lines.append(f"{i}. {ch_name}（{ch['cnt']}件）")
 
@@ -338,11 +424,11 @@ async def _send_weekly_report(bot: discord.Client) -> None:
             timestamp=datetime.now(timezone.utc),
         )
         embed.add_field(name="👥 現在のメンバー数", value=f"{member_count}人", inline=True)
-        embed.add_field(name="📥 今週の入室数", value=f"{stats['joins']}人", inline=True)
-        embed.add_field(name="📤 今週の退室数", value=f"{stats['leaves']}人", inline=True)
-        embed.add_field(name="⚡ 即抜け数", value=f"{stats['instant_leaves']}人", inline=True)
-        embed.add_field(name="💬 今週の発言数", value=f"{stats['messages']:,}件", inline=True)
-        embed.add_field(name="🔨 今週の処罰数", value=f"{stats['punishments']}件", inline=True)
+        embed.add_field(name="📥 今週の入室数",     value=f"{stats['joins']}人", inline=True)
+        embed.add_field(name="📤 今週の退室数",     value=f"{stats['leaves']}人", inline=True)
+        embed.add_field(name="⚡ 即抜け数",         value=f"{stats['instant_leaves']}人", inline=True)
+        embed.add_field(name="💬 今週の発言数",     value=f"{stats['messages']:,}件", inline=True)
+        embed.add_field(name="🔨 今週の処罰数",     value=f"{stats['punishments']}件", inline=True)
         embed.add_field(name="🔥 チャンネル熱量TOP3", value=top_ch_text, inline=False)
         embed.set_footer(text="Guide Base + Community Dashboard")
 
@@ -354,12 +440,12 @@ async def _send_weekly_report(bot: discord.Client) -> None:
 
 
 # ─────────────────────────────────────────────────────────
-# 定着率チェック（1時間ごとに7日・30日を確認）
+# 定着率チェック（1時間ごと）
 # ─────────────────────────────────────────────────────────
 
 async def _retention_checker(bot: discord.Client) -> None:
     while not bot.is_closed():
-        await asyncio.sleep(3600)  # 1時間ごと
+        await asyncio.sleep(3600)
 
         guild = bot.get_guild(GUILD_ID)
         if guild is None:
@@ -373,19 +459,14 @@ async def _retention_checker(bot: discord.Client) -> None:
                 user_id   = record["user_id"]
                 joined_at = datetime.fromisoformat(record["joined_at"])
                 elapsed   = (now - joined_at).total_seconds()
-
-                # メンバーがまだいるか確認
-                member = guild.get_member(int(user_id))
+                member    = guild.get_member(int(user_id))
                 is_member = member is not None
 
                 check_7d  = None
                 check_30d = None
 
-                # 7日経過チェック
                 if record["check_7d"] is None and elapsed >= 7 * 86400:
                     check_7d = is_member
-
-                # 30日経過チェック
                 if record["check_30d"] is None and elapsed >= 30 * 86400:
                     check_30d = is_member
 
