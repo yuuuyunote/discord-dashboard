@@ -151,8 +151,8 @@
             <div class="detail-label"><i class="fa-solid fa-user"></i> 基本情報</div>
             <div class="detail-row"><span class="detail-key">ユーザー名</span><span class="detail-val">{{ target_user.username }}</span></div>
             <div class="detail-row"><span class="detail-key">ユーザーID</span><span class="detail-val" style="font-family:'DM Mono',monospace; font-size:11px;">{{ target_user.user_id }}</span></div>
-            <div class="detail-row"><span class="detail-key">アカウント作成</span><span class="detail-val">{{ target_user.account_created[:10] }}</span></div>
-            <div class="detail-row"><span class="detail-key">サーバー参加</span><span class="detail-val">{{ target_user.joined_at[:10] if target_user.joined_at else '不明' }}</span></div>
+            <div class="detail-row"><span class="detail-key">アカウント作成</span><span class="detail-val">{{ target_user.account_created | jst("%Y/%m/%d") }}</span></div>
+            <div class="detail-row"><span class="detail-key">サーバー参加</span><span class="detail-val">{{ target_user.joined_at | jst("%Y/%m/%d") if target_user.joined_at else "不明" }}</span></div>
             <div class="detail-row"><span class="detail-key">発言数</span><span class="detail-val">{{ "{:,}".format(target_user.message_count) }} 件</span></div>
             <div class="detail-row">
               <span class="detail-key">VC時間</span>
@@ -172,12 +172,12 @@
             </div>
             <div class="detail-row">
               <span class="detail-key">入室日時</span>
-              <span class="detail-val">{{ join_log.joined_at[:16].replace('T',' ') if join_log else '不明' }}</span>
+              <span class="detail-val">{{ join_log.joined_at | jst if join_log else "不明" }}</span>
             </div>
             <div class="detail-row">
               <span class="detail-key">退室日時</span>
               <span class="detail-val">
-                {% if join_log and join_log.left_at %}{{ join_log.left_at[:16].replace('T',' ') }}
+                {% if join_log and join_log.left_at %}{{ join_log.left_at | jst }}
                 {% else %}<span class="badge badge-green">在籍中</span>{% endif %}
               </span>
             </div>
@@ -220,7 +220,7 @@
                   </td>
                   <td style="color:var(--text-sub);">{{ p.executor }}</td>
                   <td>{{ p.reason or '—' }}</td>
-                  <td style="font-family:'DM Mono',monospace; font-size:11px; color:var(--text-sub); white-space:nowrap;">{{ p.executed_at[:16].replace('T',' ') }}</td>
+                  <td style="font-family:'DM Mono',monospace; font-size:11px; color:var(--text-sub); white-space:nowrap;">{{ p.executed_at | jst }}</td>
                   <td>
                     <button class="note-delete-btn" onclick="deletePunishment({{ p.id }})" title="誤検知として削除">
                       <i class="fa-solid fa-trash"></i>
@@ -262,7 +262,7 @@
               {% for n in notes %}
               <div class="note-item" id="note-{{ n.id }}">
                 <div class="note-item-header">
-                  <span class="note-item-meta">{{ n.author_name }} — {{ n.created_at[:16].replace('T',' ') }}</span>
+                  <span class="note-item-meta">{{ n.author_name }} — {{ n.created_at | jst }}</span>
                   <button class="note-delete-btn" onclick="deleteNote({{ n.id }})">
                     <i class="fa-solid fa-trash"></i>
                   </button>
