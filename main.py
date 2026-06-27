@@ -6,6 +6,7 @@ Discord Bot（discord.py）と FastAPI（uvicorn）を
 
 import asyncio
 import os
+from datetime import datetime, timezone, timedelta
 
 import discord
 import uvicorn
@@ -29,30 +30,45 @@ PORT          = int(os.getenv("PORT", "8000"))
 # ─── Discord Bot セットアップ ──────────────────────────────
 
 intents = discord.Intents.default()
-intents.members         = True   # SERVER MEMBERS INTENT
-intents.message_content = True   # MESSAGE CONTENT INTENT
-intents.presences       = True   # PRESENCE INTENT
-intents.moderation      = True   # BAN / キック検知
+intents.members         = True
+intents.message_content = True
+intents.presences       = True
+intents.moderation      = True
 
 bot = discord.Client(intents=intents)
-setup_events(bot)  # bot/events.py のイベントを登録
+setup_events(bot)
 
 
 # ─── FastAPI セットアップ ──────────────────────────────────
 
 app = FastAPI(title="Community Dashboard")
 
-# 静的ファイル（CSS）
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-# Jinja2 テンプレート
 templates = Jinja2Templates(directory="templates")
+
+# ─── カスタムフィルター（UTC→JST変換） ────────────────────
+
+JST = timezone(timedelta(hours=9))
+
+def to_jst(value: str, fmt: str = "%Y/%m/%d %H:%M") -> str:
+    """ISO形式のUTC文字列をJST表示に変換"""
+    if not value:
+        return "—"
+    try:
+        dt = datetime.fromisoformat(str(value))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(JST).strftime(fmt)
+    except Exception:
+        return str(value)[:16].replace("T", " ")
+
+templates.env.filters["jst"] = to_jst
 
 # ルーター登録
 app.include_router(auth.router)
 app.include_router(api.router)
 
-# テンプレートオブジェクトをルーターから参照できるよう共有
 auth.templates = templates
 api.templates  = templates
 api.bot        = bot
@@ -61,10 +77,8 @@ api.bot        = bot
 # ─── 起動エントリーポイント ────────────────────────────────
 
 async def main() -> None:
-    # DB初期化（テーブルが無ければ作成）
     database.init_db()
 
-    # uvicorn の設定
     config = uvicorn.Config(
         app=app,
         host=HOST,
@@ -73,7 +87,6 @@ async def main() -> None:
     )
     server = uvicorn.Server(config)
 
-    # Bot と Web サーバーを同一ループで並行起動
     await asyncio.gather(
         bot.start(DISCORD_TOKEN),
         server.serve(),
