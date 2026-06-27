@@ -339,3 +339,17 @@ async def error_403(request: Request):
         {"request": request, "error": "アクセス権限がありません。運営ロールが必要です。"},
         status_code=403,
     )
+
+
+@router.post("/api/punishment/delete", include_in_schema=False)
+async def delete_punishment(
+    request: Request,
+    punishment_id: int = Form(...),
+):
+    """処罰記録を削除（誤検知対応）"""
+    result = _check_auth(request)
+    if isinstance(result, RedirectResponse):
+        return JSONResponse({"ok": False, "error": "unauthorized"}, status_code=401)
+
+    database.delete_punishment(punishment_id)
+    return JSONResponse({"ok": True})
