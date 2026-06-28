@@ -300,38 +300,52 @@ async def _audit_log_poller(bot: discord.Client) -> None:
                 if action == discord.AuditLogAction.ban:
                     punishment_type = "BAN"
 
+                # ── BAN解除 ───────────────────────────────
+                elif action == discord.AuditLogAction.unban:
+                    punishment_type = "UNBAN"
+
                 # ── KICK ─────────────────────────────────
                 elif action == discord.AuditLogAction.kick:
                     punishment_type = "KICK"
 
-                # ── TIMEOUT ──────────────────────────────
+                # ── TIMEOUT / TIMEOUT解除 ─────────────────
                 elif action == discord.AuditLogAction.member_update:
-                    # changesをすべてチェックしてtimed_out_untilを探す
-                    is_timeout = False
+                    is_timeout        = False
+                    is_timeout_remove = False
                     try:
-                        after_changes = entry.changes.after
-                        # after_changesのattributesを確認
-                        for attr in dir(after_changes):
-                            if attr == 'timed_out_until':
-                                val = getattr(after_changes, attr, None)
-                                if val is not None:
-                                    is_timeout = True
-                                    break
+                        after_changes  = entry.changes.after
+                        before_changes = entry.changes.before
+                        after_timeout  = getattr(after_changes,  'timed_out_until', None)
+                        before_timeout = getattr(before_changes, 'timed_out_until', None)
+
+                        if after_timeout is not None:
+                            # after が None → 解除、値あり → 実行
+                            if str(after_timeout) == "None" or after_timeout is None:
+                                is_timeout_remove = True
+                            else:
+                                is_timeout = True
+                        elif before_timeout is not None:
+                            is_timeout_remove = True
                     except Exception:
                         pass
 
-                    # 文字列チェックでも補完
-                    if not is_timeout:
+                    # 文字列チェックで補完
+                    if not is_timeout and not is_timeout_remove:
                         try:
                             changes_str = str(entry.changes)
                             if 'timed_out_until' in changes_str or 'timeout' in changes_str.lower():
-                                is_timeout = True
+                                # afterにNoneがあれば解除、なければ実行
+                                if "'after': None" in changes_str or '"after": null' in changes_str:
+                                    is_timeout_remove = True
+                                else:
+                                    is_timeout = True
                         except Exception:
                             pass
 
-                    if not is_timeout:
+                    if not is_timeout and not is_timeout_remove:
                         continue
-                    punishment_type = "TIMEOUT"
+
+                    punishment_type = "TIMEOUT_REMOVE" if is_timeout_remove else "TIMEOUT"
 
                 else:
                     continue
