@@ -1,22 +1,24 @@
 """
 bot_only.py
 Wispbyte用 Discord Bot のみ起動スクリプト
+起動時に既存メンバーをusersテーブルのみに登録（join_logsには追加しない）
 """
 
 import asyncio
 import os
+import glob
 
 import discord
 
-# .envファイルを明示的に読み込む（複数パスを試みる）
+
 def _load_env():
-    paths = [
-        "/home/container/.env",
-        ".env",
-        "/app/.env",
-    ]
+    found = glob.glob("/home/**/.env", recursive=True) + glob.glob(".env")
+    print(f"[Bot] 見つかった.envファイル: {found}")
+    paths = ["/home/container/.env", "/home/user/.env", ".env", "/app/.env"]
     for path in paths:
-        if os.path.exists(path):
+        exists = os.path.exists(path)
+        print(f"[Bot] パス確認: {path} → {'存在する' if exists else '存在しない'}")
+        if exists:
             with open(path) as f:
                 for line in f:
                     line = line.strip()
@@ -25,22 +27,21 @@ def _load_env():
                     key, _, val = line.partition("=")
                     key = key.strip()
                     val = val.strip().strip('"').strip("'")
-                    if key and key not in os.environ:
-                        os.environ[key] = val
+                    os.environ[key] = val
             print(f"[Bot] .envを読み込みました: {path}")
             return
-    print("[Bot] .envファイルが見つかりませんでした（環境変数を直接使用）")
+    print("[Bot] .envファイルが見つかりませんでした")
+
 
 _load_env()
 
-# 環境変数を読み込んだ後にimport
 import database
 from bot.events import setup_events
 from bot.commands import setup_commands
 
 DISCORD_TOKEN = os.environ.get("DISCORD_TOKEN", "")
 GUILD_ID_STR  = os.environ.get("GUILD_ID", "0")
-GUILD_ID      = int(GUILD_ID_STR) if GUILD_ID_STR.isdigit() else 0
+GUILD_ID      = int(GUILD_ID_STR) if GUILD_ID_STR.strip().isdigit() else 0
 
 print(f"[Bot] GUILD_ID={GUILD_ID}")
 print(f"[Bot] TOKEN先頭6文字={DISCORD_TOKEN[:6] if DISCORD_TOKEN else 'なし'}")
@@ -57,6 +58,10 @@ tree = setup_commands(bot)
 
 
 async def _import_existing_members(guild: discord.Guild) -> None:
+    """
+    既存メンバーを users テーブルのみに登録する。
+    join_logs には追加しない（重複防止）。
+    """
     print("[Bot] 既存メンバーのインポートを開始...")
     count = 0
     skip  = 0
@@ -66,6 +71,7 @@ async def _import_existing_members(guild: discord.Guild) -> None:
             skip += 1
             continue
 
+        # usersテーブルに既にいる場合はスキップ
         existing = database.get_user(str(member.id))
         if existing:
             skip += 1
@@ -78,6 +84,7 @@ async def _import_existing_members(guild: discord.Guild) -> None:
                 account_created=member.created_at.isoformat(),
                 joined_at=member.joined_at.isoformat() if member.joined_at else None,
             )
+            # ※ join_logsには追加しない（インポート時の重複を防ぐため）
             count += 1
         except Exception as e:
             print(f"[Bot] インポートエラー: {member} → {e}")
