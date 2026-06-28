@@ -53,7 +53,7 @@
     .memo-saved { color: var(--accent); font-size: 11px; display: none; }
     .ch-bar-wrap { display: flex; flex-direction: column; gap: 8px; }
     .ch-bar-item { display: flex; align-items: center; gap: 12px; }
-    .ch-bar-label { font-size: 13px; color: var(--text); width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .ch-bar-label { font-size: 13px; color: var(--text); width: 130px; min-width: 80px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .ch-bar-track { flex: 1; height: 8px; background: var(--border); border-radius: 4px; overflow: hidden; }
     .ch-bar-fill { height: 100%; background: var(--accent); border-radius: 4px; }
     .ch-bar-count { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--text-sub); width: 48px; text-align: right; }
@@ -180,6 +180,7 @@
               <a href="/search" class="badge badge-green" style="text-decoration:none;">全件検索 <i class="fa-solid fa-arrow-right" style="font-size:10px;"></i></a>
             </div>
             {% if recent_puns %}
+            <div style="overflow-x:auto; -webkit-overflow-scrolling:touch;">
             <table class="data-table">
               <thead><tr><th>対象</th><th>種別</th><th>実行者</th><th>日時</th></tr></thead>
               <tbody>
@@ -198,6 +199,7 @@
                 {% endfor %}
               </tbody>
             </table>
+            </div>
             {% else %}
             <p style="color:var(--text-sub); font-size:13px;">処罰履歴なし</p>
             {% endif %}
