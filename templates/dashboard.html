@@ -2,7 +2,7 @@
 <html lang="ja" data-theme="dark">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
   <title>ダッシュボード — Community Dashboard</title>
   <link rel="stylesheet" href="/static/style.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
@@ -18,7 +18,7 @@
     .sidebar-nav a i { width: 16px; text-align: center; font-size: 13px; }
     .sidebar-divider { border: none; border-top: 1px solid var(--border); margin: 16px 20px; }
     .main-content { margin-left: 220px; flex: 1; padding: 40px; max-width: calc(100% - 220px); }
-    .nav-top { position: fixed; top: 0; left: 0; right: 0; height: var(--nav-h); background: var(--bg-nav); backdrop-filter: blur(12px) saturate(160%); border-bottom: 1px solid var(--border); z-index: 1000; display: flex; align-items: center; padding: 0 32px; gap: 16px; }
+    .nav-top { position: fixed; top: 0; left: 0; right: 0; height: var(--nav-h); background: var(--bg-nav); backdrop-filter: blur(12px) saturate(160%); border-bottom: 1px solid var(--border); z-index: 1000; display: flex; align-items: center; padding: 0 32px; gap: 16px; transform: translateZ(0); -webkit-transform: translateZ(0); will-change: transform; }
     .nav-top-logo { font-family: 'DM Mono', monospace; font-size: 13px; font-weight: 500; color: var(--accent); letter-spacing: 0.04em; flex: 1; }
     .nav-top-user { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--text-sub); }
     .nav-top-avatar { width: 28px; height: 28px; border-radius: 50%; overflow: hidden; background: var(--border); }
@@ -61,7 +61,7 @@
     .card-inner { padding: 24px; }
     .toast { position: fixed; bottom: 24px; right: 24px; padding: 12px 20px; border-radius: var(--radius-sm); background: var(--accent); color: #fff; font-size: 13px; font-weight: 500; opacity: 0; transform: translateY(8px); transition: all 0.3s ease; pointer-events: none; z-index: 9999; }
     .toast.show { opacity: 1; transform: translateY(0); }
-    .chart-wrap { position: relative; height: 200px; }
+    .chart-wrap { position: relative; height: 200px; width: 100%; max-width: 100%; overflow: hidden; }
     @media (max-width: 900px) {
       .stats-grid-dash { grid-template-columns: repeat(2, 1fr); }
       .two-col { grid-template-columns: 1fr; }
@@ -139,8 +139,8 @@
             <h2>入室数推移（30日）</h2>
             <span class="badge badge-gray">日別</span>
           </div>
-          <div class="chart-wrap">
-            <canvas id="joinChart"></canvas>
+          <div class="chart-wrap" style="position:relative; width:100%; max-width:100%; overflow:hidden;">
+            <canvas id="joinChart" style="max-width:100%;"></canvas>
           </div>
         </div>
       </div>
@@ -322,6 +322,7 @@
       options: {
         responsive: true,
         maintainAspectRatio: false,
+        resizeDelay: 0,
         plugins: { legend: { display: false } },
         scales: {
           x: {
