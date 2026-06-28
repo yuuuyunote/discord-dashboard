@@ -207,7 +207,8 @@
               <span class="badge badge-gray">{{ punishments|length }} 件</span>
             </div>
             {% if punishments %}
-            <table class="data-table">
+            <div style="overflow-x:auto; -webkit-overflow-scrolling:touch;">
+            <table class="data-table" style="min-width:420px;">
               <thead><tr><th>種別</th><th>実行者</th><th>理由</th><th>日時</th><th></th></tr></thead>
               <tbody>
                 {% for p in punishments %}
@@ -230,6 +231,7 @@
                 {% endfor %}
               </tbody>
             </table>
+            </div>
             {% else %}
             <p style="color:var(--text-sub); font-size:13px;">処罰・警告履歴なし</p>
             {% endif %}
