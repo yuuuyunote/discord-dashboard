@@ -189,8 +189,10 @@
                   <td>{{ p.target_name }}</td>
                   <td>
                     {% if p.punishment_type == 'BAN' %}<span class="badge badge-red">BAN</span>
+                    {% elif p.punishment_type == 'UNBAN' %}<span class="badge badge-green">BAN解除</span>
                     {% elif p.punishment_type == 'KICK' %}<span class="badge badge-orange">KICK</span>
                     {% elif p.punishment_type == 'TIMEOUT' %}<span class="badge badge-gray">TO</span>
+                    {% elif p.punishment_type == 'TIMEOUT_REMOVE' %}<span class="badge badge-green">TO解除</span>
                     {% else %}<span class="badge badge-green">WARN</span>{% endif %}
                   </td>
                   <td style="color:var(--text-sub);">{{ p.executor }}</td>
