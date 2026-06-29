@@ -18,7 +18,7 @@
     .sidebar-nav a i { width: 16px; text-align: center; font-size: 13px; }
     .sidebar-divider { border: none; border-top: 1px solid var(--border); margin: 16px 20px; }
     .main-content { margin-left: 220px; flex: 1; padding: 40px; max-width: calc(100% - 220px); }
-    .nav-top { position: fixed; top: 0; left: 0; right: 0; height: var(--nav-h); background: var(--bg-nav); backdrop-filter: blur(12px) saturate(160%); border-bottom: 1px solid var(--border); z-index: 1000; display: flex; align-items: center; padding: 0 32px; gap: 16px; transform: translateZ(0); -webkit-transform: translateZ(0); will-change: transform; }
+    .nav-top { position: fixed !important; top: 0 !important; left: 0; right: 0; height: var(--nav-h); background: var(--bg-nav); backdrop-filter: blur(12px) saturate(160%); border-bottom: 1px solid var(--border); z-index: 1000; display: flex; align-items: center; padding: 0 32px; gap: 16px; transform: translateZ(0); -webkit-transform: translateZ(0); }
     .nav-top-logo { font-family: 'DM Mono', monospace; font-size: 13px; font-weight: 500; color: var(--accent); letter-spacing: 0.04em; flex: 1; }
     .nav-top-user { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--text-sub); }
     .nav-top-avatar { width: 28px; height: 28px; border-radius: 50%; overflow: hidden; background: var(--border); }
@@ -58,15 +58,38 @@
     .ch-bar-fill { height: 100%; background: var(--accent); border-radius: 4px; }
     .ch-bar-count { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--text-sub); width: 48px; text-align: right; }
     .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+    .three-col { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 24px; }
     .card-inner { padding: 24px; }
-    .toast { position: fixed; bottom: 24px; right: 24px; padding: 12px 20px; border-radius: var(--radius-sm); background: var(--accent); color: #fff; font-size: 13px; font-weight: 500; opacity: 0; transform: translateY(8px); transition: all 0.3s ease; pointer-events: none; z-index: 9999; }
+    .chart-wrap { position: relative; width: 100%; max-width: 100%; overflow: hidden; height: 200px; }
+    .heatmap-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    .heatmap-table { border-collapse: collapse; font-size: 10px; font-family: 'DM Mono', monospace; }
+    .heatmap-table th { padding: 3px 5px; color: var(--text-sub); font-weight: normal; text-align: center; }
+    .heatmap-table td { width: 22px; height: 22px; border-radius: 3px; text-align: center; vertical-align: middle; font-size: 9px; cursor: default; transition: opacity 0.2s; }
+    .heatmap-table td:hover { opacity: 0.7; }
+    .analysis-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+    .analysis-item { padding: 14px; border-radius: var(--radius-sm); border: 1px solid var(--border); }
+    .analysis-item-label { font-family: 'DM Mono', monospace; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-sub); margin-bottom: 6px; }
+    .analysis-item-value { font-family: 'DM Serif Display', serif; font-size: 24px; color: var(--text); }
+    .analysis-item-value span { font-size: 13px; color: var(--accent); }
+    .ranking-bar-item { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--border); }
+    .ranking-bar-item:last-child { border-bottom: none; }
+    .ranking-num { font-family: 'DM Mono', monospace; font-size: 12px; color: var(--text-sub); width: 20px; text-align: center; flex-shrink: 0; }
+    .ranking-name { font-size: 13px; color: var(--text); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .ranking-count { font-family: 'DM Mono', monospace; font-size: 12px; color: var(--accent); flex-shrink: 0; }
+    .toast { position: fixed; bottom: 70px; left: 16px; right: 16px; padding: 12px 20px; border-radius: var(--radius-sm); background: var(--accent); color: #fff; font-size: 13px; font-weight: 500; opacity: 0; transform: translateY(8px); transition: all 0.3s ease; pointer-events: none; z-index: 9999; text-align: center; }
     .toast.show { opacity: 1; transform: translateY(0); }
-    .chart-wrap { position: relative; height: 200px; width: 100%; max-width: 100%; overflow: hidden; }
-    @media (max-width: 900px) {
-      .stats-grid-dash { grid-template-columns: repeat(2, 1fr); }
-      .two-col { grid-template-columns: 1fr; }
-      .sidebar { display: none; }
-      .main-content { margin-left: 0; max-width: 100%; padding: 24px; }
+    @media (max-width: 768px) {
+      .sidebar { display: none !important; }
+      .main-content { margin-left: 0 !important; max-width: 100% !important; padding: 20px 16px 80px !important; }
+      .stats-grid-dash { grid-template-columns: repeat(2, 1fr) !important; gap: 10px !important; }
+      .stat-card { padding: 16px !important; }
+      .stat-card-value { font-size: 28px !important; }
+      .two-col, .three-col { grid-template-columns: 1fr !important; gap: 16px !important; }
+      .card-inner { padding: 16px !important; }
+      .chart-wrap { height: 150px !important; }
+      .analysis-grid { grid-template-columns: repeat(2, 1fr) !important; }
+      .ch-bar-label { width: 90px !important; font-size: 11px !important; }
+      .ch-bar-count { width: 36px !important; font-size: 10px !important; }
     }
   </style>
 </head>
@@ -94,8 +117,10 @@
       <div class="sidebar-label">Navigation</div>
       <nav class="sidebar-nav">
         <a href="/dashboard" class="active"><i class="fa-solid fa-chart-line"></i> ダッシュボード</a>
-        <a href="/search"><i class="fa-solid fa-magnifying-glass"></i> ユーザー検索</a>
-        <a href="/retention"><i class="fa-solid fa-chart-pie"></i> 定着率レポート</a>
+        <a href="/search" class=""><i class="fa-solid fa-magnifying-glass"></i> ユーザー検索</a>
+        <a href="/analytics" class=""><i class="fa-solid fa-chart-bar"></i> 分析</a>
+        <a href="/punishments" class=""><i class="fa-solid fa-gavel"></i> 処罰履歴</a>
+        <a href="/retention" class=""><i class="fa-solid fa-chart-pie"></i> 定着率</a>
       </nav>
       <hr class="sidebar-divider">
       <div class="sidebar-label">Export</div>
@@ -110,25 +135,26 @@
       <div class="page-header fade-up">
         <div class="page-header-label">Overview</div>
         <h1>コミュニティ分析</h1>
-        <p>サーバー全体のアクティビティと招待リンクの状況</p>
+        <p>サーバー全体のアクティビティと招待リンクの状況 <span id="lastUpdated" style="font-family:'DM Mono',monospace; font-size:11px; color:var(--text-sub);"></span></p>
       </div>
 
+      <!-- 統計カード（5分ごと自動更新） -->
       <div class="stats-grid-dash fade-up fade-up-1">
         <div class="card stat-card">
           <div class="stat-card-label"><i class="fa-solid fa-users"></i> サーバー人数</div>
-          <div class="stat-card-value">{{ stats.server_member_count }}<span>人</span></div>
+          <div class="stat-card-value" id="stat-members">{{ stats.server_member_count }}<span>人</span></div>
         </div>
         <div class="card stat-card">
           <div class="stat-card-label"><i class="fa-solid fa-bolt"></i> アクティブ率（30日）</div>
-          <div class="stat-card-value">{{ stats.active_rate }}<span>%</span></div>
+          <div class="stat-card-value" id="stat-active">{{ stats.active_rate }}<span>%</span></div>
         </div>
         <div class="card stat-card">
           <div class="stat-card-label"><i class="fa-solid fa-message"></i> 総発言数</div>
-          <div class="stat-card-value">{{ "{:,}".format(stats.total_messages) }}<span>件</span></div>
+          <div class="stat-card-value" id="stat-messages">{{ "{:,}".format(stats.total_messages) }}<span>件</span></div>
         </div>
         <div class="card stat-card">
           <div class="stat-card-label"><i class="fa-solid fa-gavel"></i> 処罰件数</div>
-          <div class="stat-card-value">{{ stats.total_punishments }}<span>件</span></div>
+          <div class="stat-card-value" id="stat-punishments">{{ stats.total_punishments }}<span>件</span></div>
         </div>
       </div>
 
@@ -139,14 +165,60 @@
             <h2>入室数推移（30日）</h2>
             <span class="badge badge-gray">日別</span>
           </div>
-          <div class="chart-wrap" style="position:relative; width:100%; max-width:100%; overflow:hidden;">
+          <div class="chart-wrap">
             <canvas id="joinChart" style="max-width:100%;"></canvas>
           </div>
         </div>
       </div>
 
-      <div class="two-col fade-up fade-up-2">
-        <!-- チャンネル熱量 -->
+      <!-- 新規ユーザー分析 & 退室理由 -->
+      <div class="two-col fade-up fade-up-2" style="margin-bottom:24px;">
+
+        <!-- 新規ユーザー分析パネル（機能38） -->
+        <div class="card">
+          <div class="card-inner">
+            <div class="section-head">
+              <h2>新規ユーザー分析</h2>
+              <span class="badge badge-gray">直近30日</span>
+            </div>
+            <div class="analysis-grid">
+              <div class="analysis-item">
+                <div class="analysis-item-label"><i class="fa-solid fa-user-plus"></i> 新規入室</div>
+                <div class="analysis-item-value">{{ new_user_analysis.total_new }}<span>人</span></div>
+              </div>
+              <div class="analysis-item">
+                <div class="analysis-item-label"><i class="fa-solid fa-message"></i> 平均発言数</div>
+                <div class="analysis-item-value">{{ new_user_analysis.avg_messages }}<span>件</span></div>
+              </div>
+              <div class="analysis-item">
+                <div class="analysis-item-label"><i class="fa-solid fa-person-running"></i> 即抜け率</div>
+                <div class="analysis-item-value">{{ new_user_analysis.instant_leave_rate }}<span>%</span></div>
+              </div>
+              <div class="analysis-item">
+                <div class="analysis-item-label"><i class="fa-solid fa-check"></i> 在籍継続率</div>
+                <div class="analysis-item-value">{{ new_user_analysis.still_member_rate }}<span>%</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 退室理由の分類（機能34） -->
+        <div class="card">
+          <div class="card-inner">
+            <div class="section-head">
+              <h2>退室理由の分類</h2>
+              <span class="badge badge-gray">全期間</span>
+            </div>
+            <div style="position:relative; height:160px; max-width:100%; overflow:hidden;">
+              <canvas id="leaveChart" style="max-width:100%;"></canvas>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- チャンネル熱量 & 最近の処罰 -->
+      <div class="two-col fade-up fade-up-2" style="margin-bottom:24px;">
         <div class="card">
           <div class="card-inner">
             <div class="section-head">
@@ -172,35 +244,34 @@
           </div>
         </div>
 
-        <!-- 最近の処罰 -->
         <div class="card">
           <div class="card-inner">
             <div class="section-head">
               <h2>最近の処罰</h2>
-              <a href="/search" class="badge badge-green" style="text-decoration:none;">全件検索 <i class="fa-solid fa-arrow-right" style="font-size:10px;"></i></a>
+              <a href="/punishments" class="badge badge-green" style="text-decoration:none;">全件 <i class="fa-solid fa-arrow-right" style="font-size:10px;"></i></a>
             </div>
             {% if recent_puns %}
             <div style="overflow-x:auto; -webkit-overflow-scrolling:touch;">
-            <table class="data-table">
-              <thead><tr><th>対象</th><th>種別</th><th>実行者</th><th>日時</th></tr></thead>
-              <tbody>
-                {% for p in recent_puns %}
-                <tr>
-                  <td>{{ p.target_name }}</td>
-                  <td>
-                    {% if p.punishment_type == 'BAN' %}<span class="badge badge-red">BAN</span>
-                    {% elif p.punishment_type == 'UNBAN' %}<span class="badge badge-green">BAN解除</span>
-                    {% elif p.punishment_type == 'KICK' %}<span class="badge badge-orange">KICK</span>
-                    {% elif p.punishment_type == 'TIMEOUT' %}<span class="badge badge-gray">TO</span>
-                    {% elif p.punishment_type == 'TIMEOUT_REMOVE' %}<span class="badge badge-green">TO解除</span>
-                    {% else %}<span class="badge badge-green">WARN</span>{% endif %}
-                  </td>
-                  <td style="color:var(--text-sub);">{{ p.executor }}</td>
-                  <td style="font-family:'DM Mono',monospace; font-size:11px; color:var(--text-sub);">{{ p.executed_at | jst("%Y/%m/%d") }}</td>
-                </tr>
-                {% endfor %}
-              </tbody>
-            </table>
+              <table class="data-table" style="min-width:360px;">
+                <thead><tr><th>対象</th><th>種別</th><th>実行者</th><th>日時</th></tr></thead>
+                <tbody>
+                  {% for p in recent_puns %}
+                  <tr>
+                    <td style="font-size:12px;">{{ p.target_name }}</td>
+                    <td>
+                      {% if p.punishment_type == 'BAN' %}<span class="badge badge-red">BAN</span>
+                      {% elif p.punishment_type == 'UNBAN' %}<span class="badge badge-green">BAN解除</span>
+                      {% elif p.punishment_type == 'KICK' %}<span class="badge badge-orange">KICK</span>
+                      {% elif p.punishment_type == 'TIMEOUT' %}<span class="badge badge-gray">TO</span>
+                      {% elif p.punishment_type == 'TIMEOUT_REMOVE' %}<span class="badge badge-green">TO解除</span>
+                      {% else %}<span class="badge badge-green">WARN</span>{% endif %}
+                    </td>
+                    <td style="color:var(--text-sub); font-size:11px;">{{ p.executor }}</td>
+                    <td style="font-family:'DM Mono',monospace; font-size:11px; color:var(--text-sub);">{{ p.executed_at | jst("%Y/%m/%d") }}</td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
             </div>
             {% else %}
             <p style="color:var(--text-sub); font-size:13px;">処罰履歴なし</p>
@@ -209,16 +280,99 @@
         </div>
       </div>
 
+      <!-- 発言数ランキング & 招待作成者ランキング（機能37・39） -->
+      <div class="two-col fade-up fade-up-3" style="margin-bottom:24px;">
+
+        <div class="card">
+          <div class="card-inner">
+            <div class="section-head">
+              <h2>発言数ランキング</h2>
+              <span class="badge badge-gray">全期間</span>
+            </div>
+            {% if msg_ranking %}
+            <div>
+              {% for u in msg_ranking %}
+              <div class="ranking-bar-item">
+                <span class="ranking-num">{{ loop.index }}</span>
+                <a href="/search?q={{ u.user_id }}" class="ranking-name" style="color:var(--text); text-decoration:none;">
+                  {{ u.username or u.user_id }}
+                </a>
+                <span class="ranking-count">{{ "{:,}".format(u.msg_count) }}件</span>
+              </div>
+              {% endfor %}
+            </div>
+            {% else %}
+            <p style="color:var(--text-sub); font-size:13px;">データなし</p>
+            {% endif %}
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-inner">
+            <div class="section-head">
+              <h2>招待作成者ランキング</h2>
+              <span class="badge badge-gray">入室数順</span>
+            </div>
+            {% if creator_ranking %}
+            <div>
+              {% for c in creator_ranking %}
+              <div class="ranking-bar-item">
+                <span class="ranking-num">{{ loop.index }}</span>
+                <span class="ranking-name" style="font-family:'DM Mono',monospace; font-size:11px;">{{ c.creator_id }}</span>
+                <span class="ranking-count">{{ c.total_joins or 0 }}人</span>
+              </div>
+              {% endfor %}
+            </div>
+            {% else %}
+            <p style="color:var(--text-sub); font-size:13px;">データなし</p>
+            {% endif %}
+          </div>
+        </div>
+
+      </div>
+
+      <!-- 時間帯別ヒートマップ（機能36） -->
+      <div class="card fade-up fade-up-3" style="margin-bottom:24px;">
+        <div class="card-inner">
+          <div class="section-head">
+            <h2>活動ヒートマップ</h2>
+            <span class="badge badge-gray">曜日×時間帯</span>
+          </div>
+          <div class="heatmap-wrap">
+            <table class="heatmap-table" id="heatmapTable">
+              <thead>
+                <tr>
+                  <th></th>
+                  {% for h in range(24) %}
+                  <th>{{ h }}</th>
+                  {% endfor %}
+                </tr>
+              </thead>
+              <tbody id="heatmapBody"></tbody>
+            </table>
+          </div>
+          <div style="display:flex; align-items:center; gap:8px; margin-top:12px; font-size:11px; color:var(--text-sub); font-family:'DM Mono',monospace;">
+            <span>少</span>
+            <div style="display:flex; gap:2px;">
+              {% for i in range(5) %}
+              <div style="width:14px; height:14px; border-radius:2px; background:rgba(0,200,150,{{ i * 0.25 }});"></div>
+              {% endfor %}
+            </div>
+            <span>多</span>
+          </div>
+        </div>
+      </div>
+
       <!-- 招待リンク一覧 -->
-      <div class="card fade-up fade-up-3" style="margin-top:24px;">
+      <div class="card fade-up fade-up-4" style="margin-bottom:24px;">
         <div class="card-inner">
           <div class="section-head">
             <h2>招待リンク分析</h2>
             <a href="/api/csv/invites" class="btn btn-outline" style="font-size:12px; padding:6px 14px;"><i class="fa-solid fa-download"></i> CSV</a>
           </div>
           {% if invites %}
-          <div style="overflow-x:auto;">
-            <table class="data-table">
+          <div style="overflow-x:auto; -webkit-overflow-scrolling:touch;">
+            <table class="data-table" style="min-width:600px;">
               <thead>
                 <tr><th>コード</th><th>用途メモ</th><th>入室数</th><th>即抜け率</th><th>貢献スコア</th><th>詳細</th></tr>
               </thead>
@@ -258,28 +412,38 @@
       </div>
 
       {% if mod_stats %}
-      <div class="card fade-up fade-up-4" style="margin-top:24px;">
+      <div class="card fade-up fade-up-4" style="margin-bottom:24px;">
         <div class="card-inner">
           <div class="section-head"><h2>運営実績</h2></div>
-          <table class="data-table">
-            <thead><tr><th>モデレーターID</th><th>手動警告数</th><th>監査ログ対応数</th><th>最終更新</th></tr></thead>
-            <tbody>
-              {% for m in mod_stats %}
-              <tr>
-                <td style="font-family:'DM Mono',monospace; font-size:12px;">{{ m.moderator_id }}</td>
-                <td style="text-align:center;">{{ m.warn_count }}</td>
-                <td style="text-align:center;">{{ m.audit_count }}</td>
-                <td style="font-family:'DM Mono',monospace; font-size:11px; color:var(--text-sub);">{{ m.updated_at | jst("%Y/%m/%d") }}</td>
-              </tr>
-              {% endfor %}
-            </tbody>
-          </table>
+          <div style="overflow-x:auto;">
+            <table class="data-table" style="min-width:400px;">
+              <thead><tr><th>モデレーターID</th><th>手動警告数</th><th>監査ログ対応数</th><th>最終更新</th></tr></thead>
+              <tbody>
+                {% for m in mod_stats %}
+                <tr>
+                  <td style="font-family:'DM Mono',monospace; font-size:12px;">{{ m.moderator_id }}</td>
+                  <td style="text-align:center;">{{ m.warn_count }}</td>
+                  <td style="text-align:center;">{{ m.audit_count }}</td>
+                  <td style="font-family:'DM Mono',monospace; font-size:11px; color:var(--text-sub);">{{ m.updated_at | jst("%Y/%m/%d") }}</td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
       {% endif %}
 
     </main>
   </div>
+
+  <!-- モバイル用ボトムナビ -->
+  <nav class="dash-mobile-nav" style="transform:translateZ(0); -webkit-transform:translateZ(0); position:fixed !important; bottom:0 !important;">
+    <a href="/dashboard" class="active"><i class="fa-solid fa-chart-line"></i>ホーム</a>
+    <a href="/search"><i class="fa-solid fa-magnifying-glass"></i>検索</a>
+    <a href="/punishments"><i class="fa-solid fa-gavel"></i>処罰</a>
+    <a href="/retention"><i class="fa-solid fa-chart-pie"></i>定着率</a>
+  </nav>
 
   <div class="toast" id="toast"></div>
 
@@ -309,38 +473,75 @@
 
     // 入室数グラフ
     const graphData = {{ join_graph | safe }};
-    const ctx = document.getElementById('joinChart').getContext('2d');
-    new Chart(ctx, {
+    const joinCtx = document.getElementById('joinChart').getContext('2d');
+    new Chart(joinCtx, {
       type: 'bar',
       data: {
         labels: graphData.labels,
-        datasets: [{
-          label: '入室数',
-          data: graphData.data,
-          backgroundColor: 'rgba(0, 200, 150, 0.3)',
-          borderColor: 'rgba(0, 200, 150, 0.8)',
-          borderWidth: 1,
-          borderRadius: 4,
-        }]
+        datasets: [{ label: '入室数', data: graphData.data, backgroundColor: 'rgba(0,200,150,0.3)', borderColor: 'rgba(0,200,150,0.8)', borderWidth: 1, borderRadius: 4 }]
       },
       options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        resizeDelay: 0,
+        responsive: true, maintainAspectRatio: false, resizeDelay: 0,
         plugins: { legend: { display: false } },
         scales: {
-          x: {
-            ticks: { color: 'var(--text-sub)', font: { family: 'DM Mono', size: 10 } },
-            grid: { color: 'var(--border)' }
-          },
-          y: {
-            ticks: { color: 'var(--text-sub)', font: { family: 'DM Mono', size: 10 }, stepSize: 1 },
-            grid: { color: 'var(--border)' },
-            beginAtZero: true,
-          }
+          x: { ticks: { color: 'var(--text-sub)', font: { family: 'DM Mono', size: 10 } }, grid: { color: 'var(--border)' } },
+          y: { ticks: { color: 'var(--text-sub)', font: { family: 'DM Mono', size: 10 }, stepSize: 1 }, grid: { color: 'var(--border)' }, beginAtZero: true }
         }
       }
     });
+
+    // 退室理由の円グラフ
+    const leaveData = {{ leave_stats | safe }};
+    const leaveCtx = document.getElementById('leaveChart').getContext('2d');
+    new Chart(leaveCtx, {
+      type: 'doughnut',
+      data: {
+        labels: ['BAN', 'KICK', '即抜け', '通常退室'],
+        datasets: [{ data: [leaveData.ban, leaveData.kick, leaveData.instant, leaveData.long_leave], backgroundColor: ['rgba(220,60,60,0.7)', 'rgba(220,140,40,0.7)', 'rgba(100,100,100,0.7)', 'rgba(0,200,150,0.7)'], borderWidth: 0 }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { position: 'right', labels: { color: 'var(--text-sub)', font: { size: 11 }, boxWidth: 12 } } }
+      }
+    });
+
+    // ヒートマップ描画
+    const heatmapData = {{ heatmap_data | safe }};
+    const days = ['日', '月', '火', '水', '木', '金', '土'];
+    const tbody = document.getElementById('heatmapBody');
+    const maxVal = Math.max(...heatmapData.flat(), 1);
+    days.forEach((day, dow) => {
+      const tr = document.createElement('tr');
+      const th = document.createElement('th');
+      th.textContent = day;
+      tr.appendChild(th);
+      for (let h = 0; h < 24; h++) {
+        const td = document.createElement('td');
+        const val = heatmapData[dow][h] || 0;
+        const intensity = val / maxVal;
+        td.style.background = `rgba(0,200,150,${intensity.toFixed(2)})`;
+        td.title = `${day}曜 ${h}時: ${val}件`;
+        tr.appendChild(td);
+      }
+      tbody.appendChild(tr);
+    });
+
+    // 統計カード自動更新（5分ごと）
+    async function refreshStats() {
+      try {
+        const res  = await fetch('/api/stats/realtime');
+        const data = await res.json();
+        if (data.error) return;
+        document.getElementById('stat-members').innerHTML    = `${data.server_member_count}<span>人</span>`;
+        document.getElementById('stat-active').innerHTML     = `${data.active_rate}<span>%</span>`;
+        document.getElementById('stat-messages').innerHTML   = `${data.total_messages.toLocaleString()}<span>件</span>`;
+        document.getElementById('stat-punishments').innerHTML= `${data.total_punishments}<span>件</span>`;
+        const now = new Date();
+        document.getElementById('lastUpdated').textContent = `更新: ${now.getHours()}:${String(now.getMinutes()).padStart(2,'0')}`;
+      } catch(e) {}
+    }
+    setInterval(refreshStats, 5 * 60 * 1000);
+    refreshStats();
 
     // 招待メモ保存
     document.querySelectorAll('.memo-form').forEach(form => {
@@ -355,21 +556,34 @@
         try {
           const res  = await fetch('/api/invite/memo', { method: 'POST', body: fd });
           const data = await res.json();
-          if (data.ok) {
-            showToast('メモを保存しました');
-            saved.style.display = 'inline';
-            setTimeout(() => { saved.style.display = 'none'; }, 2000);
-          } else { showToast('保存に失敗しました', false); }
+          if (data.ok) { showToast('メモを保存しました'); saved.style.display = 'inline'; setTimeout(() => { saved.style.display = 'none'; }, 2000); }
+          else { showToast('保存に失敗しました', false); }
         } catch { showToast('通信エラー', false); }
       });
     });
+
+    // ─── 統計カード自動更新（5分ごと） ───────────────────
+    async function refreshStats() {
+      try {
+        const res  = await fetch('/api/stats');
+        if (!res.ok) return;
+        const data = await res.json();
+
+        const els = {
+          server_member_count: document.getElementById('stat-members'),
+          active_rate:         document.getElementById('stat-active'),
+          total_messages:      document.getElementById('stat-messages'),
+          total_punishments:   document.getElementById('stat-punishments'),
+        };
+
+        if (els.server_member_count) els.server_member_count.textContent = data.server_member_count.toLocaleString();
+        if (els.active_rate)         els.active_rate.textContent         = data.active_rate;
+        if (els.total_messages)      els.total_messages.textContent      = data.total_messages.toLocaleString();
+        if (els.total_punishments)   els.total_punishments.textContent   = data.total_punishments;
+      } catch(e) {}
+    }
+    setInterval(refreshStats, 5 * 60 * 1000); // 5分ごと
+
   </script>
-  <!-- モバイル用ボトムナビ -->
-  <nav class="dash-mobile-nav">
-    <a href="/dashboard" class="active"><i class="fa-solid fa-chart-line"></i>ホーム</a>
-    <a href="/search"><i class="fa-solid fa-magnifying-glass"></i>検索</a>
-    <a href="/retention"><i class="fa-solid fa-chart-pie"></i>定着率</a>
-    <a href="/api/csv/users" target="_blank"><i class="fa-solid fa-download"></i>CSV</a>
-  </nav>
 </body>
 </html>
