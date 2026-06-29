@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="ja" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <title>分析 — Community Dashboard</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+  <style>
+    .dash-layout { display: flex; min-height: 100vh; padding-top: var(--nav-h); }
+    .sidebar { width: 220px; flex-shrink: 0; border-right: 1px solid var(--border); padding: 32px 0; position: fixed; top: var(--nav-h); left: 0; bottom: 0; overflow-y: auto; background: var(--bg-card); }
+    .sidebar-label { font-family: 'DM Mono', monospace; font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-sub); padding: 0 20px; margin-bottom: 8px; }
+    .sidebar-nav { display: flex; flex-direction: column; gap: 2px; padding: 0 12px; }
+    .sidebar-nav a { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: var(--radius-sm); font-size: 14px; font-weight: 500; color: var(--text-sub); transition: all var(--transition); text-decoration: none; }
+    .sidebar-nav a:hover { color: var(--text); background: var(--border); }
+    .sidebar-nav a.active { color: var(--accent); background: var(--accent-light); }
+    .sidebar-nav a i { width: 16px; text-align: center; font-size: 13px; }
+    .sidebar-divider { border: none; border-top: 1px solid var(--border); margin: 16px 20px; }
+    .main-content { margin-left: 220px; flex: 1; padding: 40px; max-width: calc(100% - 220px); }
+    .nav-top { position: fixed; top: 0; left: 0; right: 0; height: var(--nav-h); background: var(--bg-nav); backdrop-filter: blur(12px); border-bottom: 1px solid var(--border); z-index: 1000; display: flex; align-items: center; padding: 0 32px; gap: 16px; transform: translateZ(0); }
+    .nav-top-logo { font-family: 'DM Mono', monospace; font-size: 13px; font-weight: 500; color: var(--accent); flex: 1; }
+    .nav-top-user { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--text-sub); }
+    .nav-top-avatar { width: 28px; height: 28px; border-radius: 50%; overflow: hidden; background: var(--border); }
+    .nav-top-avatar img { width: 100%; height: 100%; object-fit: cover; }
+    .page-header { margin-bottom: 32px; }
+    .page-header-label { font-family: 'DM Mono', monospace; font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent); margin-bottom: 6px; }
+    .page-header h1 { font-family: 'DM Serif Display', serif; font-size: 28px; color: var(--text); }
+    .page-header p { font-size: 13px; color: var(--text-sub); margin-top: 4px; }
+    .section-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+    .section-head h2 { font-family: 'DM Serif Display', serif; font-size: 20px; color: var(--text); }
+    .card-inner { padding: 24px; }
+    .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 24px; }
+    .three-col { display: grid; grid-template-columns: repeat(3,1fr); gap: 16px; margin-bottom: 24px; }
+
+    /* 統計ミニカード */
+    .stat-mini { padding: 20px; border-radius: var(--radius); }
+    .stat-mini-label { font-family: 'DM Mono', monospace; font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-sub); margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+    .stat-mini-label i { color: var(--accent); }
+    .stat-mini-value { font-family: 'DM Serif Display', serif; font-size: 28px; color: var(--text); line-height: 1; }
+    .stat-mini-value span { font-size: 14px; color: var(--accent); }
+    .stat-mini-sub { font-size: 11px; color: var(--text-sub); margin-top: 4px; font-family: 'DM Mono', monospace; }
+
+    /* ヒートマップ */
+    .heatmap-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    .heatmap-grid { display: grid; grid-template-columns: 40px repeat(24, 1fr); gap: 2px; min-width: 600px; }
+    .heatmap-header { font-family: 'DM Mono', monospace; font-size: 9px; color: var(--text-sub); text-align: center; padding: 2px 0; }
+    .heatmap-label { font-family: 'DM Mono', monospace; font-size: 10px; color: var(--text-sub); display: flex; align-items: center; justify-content: flex-end; padding-right: 6px; }
+    .heatmap-cell { height: 20px; border-radius: 2px; transition: opacity 0.2s; cursor: default; }
+    .heatmap-cell:hover { opacity: 0.7; }
+
+    /* テーブル */
+    .data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .data-table th { font-family: 'DM Mono', monospace; font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-sub); padding: 10px 16px; text-align: left; border-bottom: 1px solid var(--border); }
+    .data-table td { padding: 12px 16px; border-bottom: 1px solid var(--border); color: var(--text); vertical-align: middle; }
+    .data-table tr:last-child td { border-bottom: none; }
+    .data-table tr:hover td { background: var(--accent-light); }
+
+    /* バッジ */
+    .badge { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 100px; font-family: 'DM Mono', monospace; font-size: 11px; font-weight: 500; }
+    .badge-green { background: var(--accent-light); color: var(--accent); }
+    .badge-gray { background: var(--border); color: var(--text-sub); }
+
+    /* 円グラフ */
+    .donut-wrap { position: relative; height: 200px; max-width: 200px; margin: 0 auto; }
+
+    /* タブ */
+    .tab-btns { display: flex; gap: 8px; margin-bottom: 16px; }
+    .tab-btn { padding: 6px 14px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: none; color: var(--text-sub); font-size: 13px; cursor: pointer; transition: all var(--transition); font-family: 'Noto Sans JP', sans-serif; }
+    .tab-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .tab-btn:hover:not(.active) { border-color: var(--accent); color: var(--accent); }
+
+    /* バーランキング */
+    .rank-bar-wrap { display: flex; flex-direction: column; gap: 10px; }
+    .rank-bar-item { display: flex; align-items: center; gap: 10px; }
+    .rank-num { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--text-sub); width: 20px; text-align: center; }
+    .rank-name { font-size: 13px; color: var(--text); width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .rank-track { flex: 1; height: 8px; background: var(--border); border-radius: 4px; overflow: hidden; }
+    .rank-fill { height: 100%; background: var(--accent); border-radius: 4px; }
+    .rank-count { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--text-sub); width: 56px; text-align: right; }
+
+    .dash-mobile-nav { display: none; position: fixed; bottom: 0; left: 0; right: 0; height: 60px; background: var(--bg-card); border-top: 1px solid var(--border); z-index: 1000; padding: 0 8px; align-items: center; justify-content: space-around; transform: translateZ(0); }
+    .dash-mobile-nav a { display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 8px 16px; border-radius: var(--radius-sm); color: var(--text-sub); font-size: 10px; font-family: 'DM Mono', monospace; text-decoration: none; transition: all var(--transition); flex: 1; text-align: center; }
+    .dash-mobile-nav a i { font-size: 18px; }
+    .dash-mobile-nav a.active { color: var(--accent); }
+
+    @media (max-width: 768px) {
+      .sidebar { display: none !important; }
+      .main-content { margin-left: 0 !important; max-width: 100% !important; padding: 20px 16px 80px !important; }
+      .dash-mobile-nav { display: flex; }
+      .two-col { grid-template-columns: 1fr !important; }
+      .three-col { grid-template-columns: repeat(2,1fr) !important; }
+      .page-header h1 { font-size: 22px !important; }
+      .rank-name { width: 100px !important; }
+    }
+  </style>
+</head>
+<body>
+  <nav class="nav-top">
+    <span class="nav-top-logo"><i class="fa-solid fa-terminal"></i> Guide Base + / Dashboard</span>
+    <label class="theme-toggle" title="テーマ切替">
+      <input type="checkbox" id="themeChk">
+      <span class="theme-toggle-track"></span>
+      <span class="theme-toggle-thumb"><span id="themeIcon">☀️</span></span>
+    </label>
+    <div class="nav-top-user">
+      {% if session.avatar %}
+      <div class="nav-top-avatar">
+        <img src="https://cdn.discordapp.com/avatars/{{ session.user_id }}/{{ session.avatar }}.png" alt="">
+      </div>
+      {% endif %}
+      {{ session.username }}
+      <a href="/logout" style="color:var(--text-sub); font-size:12px; margin-left:8px;"><i class="fa-solid fa-right-from-bracket"></i></a>
+    </div>
+  </nav>
+
+  <div class="dash-layout">
+    <aside class="sidebar">
+      <div class="sidebar-label">Navigation</div>
+      <nav class="sidebar-nav">
+        <a href="/dashboard"><i class="fa-solid fa-chart-line"></i> ダッシュボード</a>
+        <a href="/search"><i class="fa-solid fa-magnifying-glass"></i> ユーザー検索</a>
+        <a href="/analytics" class="active"><i class="fa-solid fa-chart-bar"></i> 分析</a>
+        <a href="/punishments"><i class="fa-solid fa-gavel"></i> 処罰履歴</a>
+        <a href="/retention"><i class="fa-solid fa-chart-pie"></i> 定着率</a>
+      </nav>
+      <hr class="sidebar-divider">
+      <div class="sidebar-label">Export</div>
+      <nav class="sidebar-nav">
+        <a href="/api/csv/users" target="_blank"><i class="fa-solid fa-file-csv"></i> ユーザーCSV</a>
+        <a href="/api/csv/punishments" target="_blank"><i class="fa-solid fa-file-csv"></i> 処罰履歴CSV</a>
+        <a href="/api/csv/invites" target="_blank"><i class="fa-solid fa-file-csv"></i> 招待リンクCSV</a>
+      </nav>
+    </aside>
+
+    <main class="main-content">
+      <div class="page-header fade-up">
+        <div class="page-header-label">Analytics</div>
+        <h1>詳細分析</h1>
+        <p>ヒートマップ・ランキング・新規ユーザー分析</p>
+      </div>
+
+      <!-- 新規ユーザー分析パネル（30日） -->
+      <div class="card fade-up" style="margin-bottom:24px;">
+        <div class="card-inner">
+          <div class="section-head">
+            <h2>新規ユーザー分析（30日）</h2>
+            <span class="badge badge-gray">直近30日</span>
+          </div>
+          <div class="three-col">
+            <div class="stat-mini card">
+              <div class="stat-mini-label"><i class="fa-solid fa-user-plus"></i> 新規入室</div>
+              <div class="stat-mini-value">{{ new_stats_30.new_joins }}<span>人</span></div>
+            </div>
+            <div class="stat-mini card">
+              <div class="stat-mini-label"><i class="fa-solid fa-person-running"></i> 即抜け率</div>
+              <div class="stat-mini-value">{{ new_stats_30.instant_rate }}<span>%</span></div>
+              <div class="stat-mini-sub">{{ new_stats_30.instant }}人</div>
+            </div>
+            <div class="stat-mini card">
+              <div class="stat-mini-label"><i class="fa-solid fa-message"></i> 発言した新規</div>
+              <div class="stat-mini-value">{{ new_stats_30.active_rate }}<span>%</span></div>
+              <div class="stat-mini-sub">{{ new_stats_30.active_new }}人</div>
+            </div>
+            <div class="stat-mini card">
+              <div class="stat-mini-label"><i class="fa-solid fa-clock"></i> 7日定着率</div>
+              <div class="stat-mini-value">{{ new_stats_30.retained_rate }}<span>%</span></div>
+              <div class="stat-mini-sub">{{ new_stats_30.retained_7d }}人</div>
+            </div>
+            <div class="stat-mini card">
+              <div class="stat-mini-label"><i class="fa-solid fa-user-plus"></i> 新規入室（7日）</div>
+              <div class="stat-mini-value">{{ new_stats_7.new_joins }}<span>人</span></div>
+            </div>
+            <div class="stat-mini card">
+              <div class="stat-mini-label"><i class="fa-solid fa-person-running"></i> 即抜け率（7日）</div>
+              <div class="stat-mini-value">{{ new_stats_7.instant_rate }}<span>%</span></div>
+              <div class="stat-mini-sub">{{ new_stats_7.instant }}人</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ヒートマップ -->
+      <div class="card fade-up" style="margin-bottom:24px;">
+        <div class="card-inner">
+          <div class="section-head">
+            <h2>活動ヒートマップ（JST）</h2>
+            <span class="badge badge-gray">曜日×時間帯</span>
+          </div>
+          <div class="heatmap-wrap">
+            <div class="heatmap-grid" id="heatmapGrid"></div>
+          </div>
+          <div style="display:flex; align-items:center; gap:8px; margin-top:12px; font-size:11px; color:var(--text-sub); font-family:'DM Mono',monospace;">
+            <span>少</span>
+            <div style="display:flex; gap:2px;">
+              <div style="width:14px; height:14px; border-radius:2px; background:var(--border);"></div>
+              <div style="width:14px; height:14px; border-radius:2px; background:rgba(0,200,150,0.2);"></div>
+              <div style="width:14px; height:14px; border-radius:2px; background:rgba(0,200,150,0.45);"></div>
+              <div style="width:14px; height:14px; border-radius:2px; background:rgba(0,200,150,0.7);"></div>
+              <div style="width:14px; height:14px; border-radius:2px; background:rgba(0,200,150,1);"></div>
+            </div>
+            <span>多</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 発言数ランキング & 退室理由 -->
+      <div class="two-col fade-up">
+        <!-- 発言数ランキング -->
+        <div class="card">
+          <div class="card-inner">
+            <div class="section-head"><h2>発言数ランキング</h2></div>
+            <div class="tab-btns">
+              <button class="tab-btn active" onclick="switchRanking('30d', this)">30日</button>
+              <button class="tab-btn" onclick="switchRanking('all', this)">全期間</button>
+            </div>
+            <div id="ranking-30d" class="rank-bar-wrap">
+              {% if ranking_30d %}
+              {% set max_30 = ranking_30d[0].msg_count %}
+              {% for u in ranking_30d %}
+              <div class="rank-bar-item">
+                <span class="rank-num">{{ loop.index }}</span>
+                <span class="rank-name">{{ u.username or u.user_id }}</span>
+                <div class="rank-track"><div class="rank-fill" style="width:{{ (u.msg_count / max_30 * 100)|round }}%"></div></div>
+                <span class="rank-count">{{ "{:,}".format(u.msg_count) }}件</span>
+              </div>
+              {% endfor %}
+              {% else %}
+              <p style="color:var(--text-sub); font-size:13px;">データなし</p>
+              {% endif %}
+            </div>
+            <div id="ranking-all" class="rank-bar-wrap" style="display:none;">
+              {% if ranking_all %}
+              {% set max_all = ranking_all[0].msg_count %}
+              {% for u in ranking_all %}
+              <div class="rank-bar-item">
+                <span class="rank-num">{{ loop.index }}</span>
+                <span class="rank-name">{{ u.username or u.user_id }}</span>
+                <div class="rank-track"><div class="rank-fill" style="width:{{ (u.msg_count / max_all * 100)|round }}%"></div></div>
+                <span class="rank-count">{{ "{:,}".format(u.msg_count) }}件</span>
+              </div>
+              {% endfor %}
+              {% else %}
+              <p style="color:var(--text-sub); font-size:13px;">データなし</p>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+
+        <!-- 退室理由 円グラフ -->
+        <div class="card">
+          <div class="card-inner">
+            <div class="section-head"><h2>退室理由の内訳</h2></div>
+            <div class="donut-wrap">
+              <canvas id="leaveChart"></canvas>
+            </div>
+            <div style="display:flex; flex-direction:column; gap:6px; margin-top:16px; font-size:12px;">
+              <div style="display:flex; justify-content:space-between;"><span style="color:var(--text-sub);">⚡ 即抜け（24h以内）</span><span>{{ leave_stats.instant }}人</span></div>
+              <div style="display:flex; justify-content:space-between;"><span style="color:var(--text-sub);">📅 短期（1〜7日）</span><span>{{ leave_stats.short }}人</span></div>
+              <div style="display:flex; justify-content:space-between;"><span style="color:var(--text-sub);">📆 長期在籍後</span><span>{{ leave_stats.long }}人</span></div>
+              <div style="display:flex; justify-content:space-between;"><span style="color:var(--text-sub);">🔨 KICK</span><span>{{ leave_stats.kick }}人</span></div>
+              <div style="display:flex; justify-content:space-between;"><span style="color:var(--text-sub);">🚫 BAN</span><span>{{ leave_stats.ban }}人</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 招待作成者ランキング -->
+      <div class="card fade-up" style="margin-bottom:24px;">
+        <div class="card-inner">
+          <div class="section-head">
+            <h2>招待作成者ランキング</h2>
+            <span class="badge badge-gray">貢献スコア順</span>
+          </div>
+          {% if creator_ranking %}
+          <div style="overflow-x:auto; -webkit-overflow-scrolling:touch;">
+            <table class="data-table" style="min-width:500px;">
+              <thead>
+                <tr><th>作成者</th><th>リンク数</th><th>入室数</th><th>総発言数</th><th>貢献スコア</th></tr>
+              </thead>
+              <tbody>
+                {% for r in creator_ranking %}
+                <tr>
+                  <td>{{ r.creator_name }}</td>
+                  <td style="text-align:center;">{{ r.invite_count }}</td>
+                  <td style="text-align:center;">{{ r.total_joins or 0 }}</td>
+                  <td style="text-align:center;">{{ "{:,}".format(r.total_messages or 0) }}</td>
+                  <td style="font-family:'DM Mono',monospace; font-size:12px; color:var(--accent);">{{ r.contribution_score or 0 }}pt</td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          {% else %}
+          <p style="color:var(--text-sub); font-size:13px;">データなし</p>
+          {% endif %}
+        </div>
+      </div>
+
+    </main>
+  </div>
+
+  <nav class="dash-mobile-nav">
+    <a href="/dashboard"><i class="fa-solid fa-chart-line"></i>ホーム</a>
+    <a href="/search"><i class="fa-solid fa-magnifying-glass"></i>検索</a>
+    <a href="/analytics" class="active"><i class="fa-solid fa-chart-bar"></i>分析</a>
+    <a href="/punishments"><i class="fa-solid fa-gavel"></i>処罰</a>
+    <a href="/retention"><i class="fa-solid fa-chart-pie"></i>定着率</a>
+  </nav>
+
+  <script>
+    // テーマ
+    const chk = document.getElementById('themeChk');
+    const icon = document.getElementById('themeIcon');
+    const saved = localStorage.getItem('theme') || 'dark';
+    document.documentElement.setAttribute('data-theme', saved);
+    chk.checked = saved === 'light';
+    icon.textContent = saved === 'light' ? '🌙' : '☀️';
+    chk.addEventListener('change', () => {
+      const t = chk.checked ? 'light' : 'dark';
+      document.documentElement.setAttribute('data-theme', t);
+      localStorage.setItem('theme', t);
+      icon.textContent = t === 'light' ? '🌙' : '☀️';
+    });
+
+    // ヒートマップ描画
+    const heatmapData = {{ heatmap | safe }};
+    const days = ['日','月','火','水','木','金','土'];
+    const grid = document.getElementById('heatmapGrid');
+
+    // 最大値取得
+    const maxVal = Math.max(...heatmapData.flat().filter(v => v > 0), 1);
+
+    // ヘッダー行（時間）
+    grid.appendChild(Object.assign(document.createElement('div'), {className: 'heatmap-header'}));
+    for (let h = 0; h < 24; h++) {
+      const el = document.createElement('div');
+      el.className = 'heatmap-header';
+      el.textContent = h % 3 === 0 ? h : '';
+      grid.appendChild(el);
+    }
+
+    // データ行
+    for (let d = 0; d < 7; d++) {
+      const label = document.createElement('div');
+      label.className = 'heatmap-label';
+      label.textContent = days[d];
+      grid.appendChild(label);
+
+      for (let h = 0; h < 24; h++) {
+        const val = heatmapData[d][h];
+        const ratio = val / maxVal;
+        const cell = document.createElement('div');
+        cell.className = 'heatmap-cell';
+        if (val === 0) {
+          cell.style.background = 'var(--border)';
+        } else {
+          const alpha = 0.15 + ratio * 0.85;
+          cell.style.background = `rgba(0,200,150,${alpha.toFixed(2)})`;
+        }
+        cell.title = `${days[d]}曜 ${h}時: ${val}件`;
+        grid.appendChild(cell);
+      }
+    }
+
+    // 退室理由 円グラフ
+    const leaveCtx = document.getElementById('leaveChart').getContext('2d');
+    new Chart(leaveCtx, {
+      type: 'doughnut',
+      data: {
+        labels: ['即抜け', '短期', '長期', 'KICK', 'BAN'],
+        datasets: [{
+          data: [
+            {{ leave_stats.instant }},
+            {{ leave_stats.short }},
+            {{ leave_stats.long }},
+            {{ leave_stats.kick }},
+            {{ leave_stats.ban }},
+          ],
+          backgroundColor: [
+            'rgba(0,200,150,0.8)',
+            'rgba(0,200,150,0.5)',
+            'rgba(0,200,150,0.3)',
+            'rgba(220,140,40,0.8)',
+            'rgba(220,60,60,0.8)',
+          ],
+          borderWidth: 0,
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+        }
+      }
+    });
+
+    // ランキング切り替え
+    function switchRanking(tab, btn) {
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      document.getElementById('ranking-30d').style.display = tab === '30d' ? 'flex' : 'none';
+      document.getElementById('ranking-all').style.display = tab === 'all' ? 'flex' : 'none';
+    }
+    document.getElementById('ranking-30d').style.display = 'flex';
+  </script>
+</body>
+</html>
