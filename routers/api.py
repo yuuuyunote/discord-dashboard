@@ -98,15 +98,34 @@ async def dashboard_page(request: Request):
 
     stats["server_member_count"] = _get_guild_member_count()
 
+    # 追加機能データ取得
+    leave_stats      = database.get_leave_reason_stats()
+    heatmap_raw      = database.get_activity_heatmap()
+    msg_ranking      = database.get_user_message_ranking(limit=10)
+    new_user_analysis= database.get_new_user_analysis()
+    creator_ranking  = database.get_invite_creator_ranking()
+
+    # ヒートマップデータをJSON化（dow=0:日曜〜6:土曜）
+    heatmap_data = [[0]*24 for _ in range(7)]
+    for row in heatmap_raw:
+        dow  = int(row["dow"])
+        hour = int(row["hour"])
+        heatmap_data[dow][hour] = row["count"]
+
     return templates.TemplateResponse("dashboard.html", {
-        "request":     request,
-        "session":     session,
-        "stats":       stats,
-        "invites":     invites,
-        "ch_ranking":  ch_ranking_named,
-        "recent_puns": recent_puns,
-        "mod_stats":   mod_stats,
-        "join_graph":  json.dumps(join_graph, ensure_ascii=False),
+        "request":          request,
+        "session":          session,
+        "stats":            stats,
+        "invites":          invites,
+        "ch_ranking":       ch_ranking_named,
+        "recent_puns":      recent_puns,
+        "mod_stats":        mod_stats,
+        "join_graph":       json.dumps(join_graph, ensure_ascii=False),
+        "leave_stats":      json.dumps(leave_stats, ensure_ascii=False),
+        "heatmap_data":     json.dumps(heatmap_data, ensure_ascii=False),
+        "msg_ranking":      msg_ranking,
+        "new_user_analysis":new_user_analysis,
+        "creator_ranking":  creator_ranking,
     })
 
 
@@ -353,3 +372,151 @@ async def delete_punishment(
 
     database.delete_punishment(punishment_id)
     return JSONResponse({"ok": True})
+
+
+# ─────────────────────────────────────────────────────────
+# 機能34・36・37・38・39・45・46 追加エンドポイント
+# ─────────────────────────────────────────────────────────
+
+@router.get("/punishments", include_in_schema=False)
+async def punishments_page(
+    request: Request,
+    type: str = "",
+    executor: str = "",
+    days: int = 0,
+):
+    """処罰履歴検索・フィルター画面（機能46）"""
+    result = _check_auth(request)
+    if isinstance(result, RedirectResponse):
+        return result
+    session = result
+
+    punishments = database.get_punishment_filtered(
+        punishment_type=type,
+        executor=executor,
+        days=days,
+        limit=100,
+    )
+
+    return templates.TemplateResponse("punishments.html", {
+        "request":     request,
+        "session":     session,
+        "punishments": punishments,
+        "filter_type": type,
+        "filter_executor": executor,
+        "filter_days": days,
+    })
+
+
+@router.get("/api/stats/realtime", include_in_schema=False)
+async def stats_realtime(request: Request):
+    """統計カードのリアルタイム更新用API（機能45）"""
+    result = _check_auth(request)
+    if isinstance(result, RedirectResponse):
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
+
+    stats = database.get_dashboard_stats()
+    stats["server_member_count"] = _get_guild_member_count()
+    return JSONResponse(stats)
+
+
+# ─────────────────────────────────────────────────────────
+# 新機能ページ
+# ─────────────────────────────────────────────────────────
+
+@router.get("/analytics", include_in_schema=False)
+async def analytics_page(request: Request):
+    """分析ページ（ヒートマップ・ランキング・新規ユーザー分析）"""
+    result = _check_auth(request)
+    if isinstance(result, RedirectResponse):
+        return result
+    session = result
+
+    import json as _json
+
+    # ヒートマップデータ
+    heatmap_raw = database.get_activity_heatmap()
+    heatmap = [[0] * 24 for _ in range(7)]
+    for r in heatmap_raw:
+        dow  = int(r["dow"])
+        hour = int(r["hour"])
+        heatmap[dow][hour] = int(r["cnt"])
+
+    # 発言数ランキング
+    ranking_30d  = database.get_user_message_ranking(period_days=30,  limit=10)
+    ranking_all  = database.get_user_message_ranking(period_days=0,   limit=10)
+
+    # 新規ユーザー分析
+    new_stats_30 = database.get_new_user_stats(days=30)
+    new_stats_7  = database.get_new_user_stats(days=7)
+
+    # 招待作成者ランキング
+    creator_ranking = database.get_invite_creator_ranking()
+
+    # 退室理由統計
+    leave_stats = database.get_leave_reason_stats()
+
+    # Bot名を解決（creator_id → Discordユーザー名）
+    for r in creator_ranking:
+        if bot:
+            guild  = bot.get_guild(GUILD_ID)
+            member = guild.get_member(int(r["creator_id"])) if guild and r["creator_id"].isdigit() else None
+            r["creator_name"] = member.display_name if member else r["creator_id"]
+        else:
+            r["creator_name"] = r["creator_id"]
+
+    return templates.TemplateResponse("analytics.html", {
+        "request":          request,
+        "session":          session,
+        "heatmap":          _json.dumps(heatmap),
+        "ranking_30d":      ranking_30d,
+        "ranking_all":      ranking_all,
+        "new_stats_30":     new_stats_30,
+        "new_stats_7":      new_stats_7,
+        "creator_ranking":  creator_ranking,
+        "leave_stats":      leave_stats,
+    })
+
+
+@router.get("/punishments", include_in_schema=False)
+async def punishments_page(
+    request: Request,
+    type: str = "",
+    executor: str = "",
+    days: int = 0,
+):
+    """処罰履歴フィルター画面"""
+    result = _check_auth(request)
+    if isinstance(result, RedirectResponse):
+        return result
+    session = result
+
+    punishments = database.get_punishments_filtered(
+        punishment_type=type,
+        executor=executor,
+        days=days,
+        limit=100,
+    )
+
+    return templates.TemplateResponse("punishments.html", {
+        "request":     request,
+        "session":     session,
+        "punishments": punishments,
+        "filter_type": type,
+        "filter_executor": executor,
+        "filter_days": days,
+    })
+
+
+# ─── 統計APIエンドポイント（45：自動更新用） ──────────────
+
+@router.get("/api/stats", include_in_schema=False)
+async def api_stats(request: Request):
+    """ダッシュボード統計をJSONで返す（自動更新用）"""
+    result = _check_auth(request)
+    if isinstance(result, RedirectResponse):
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
+
+    stats = database.get_dashboard_stats()
+    stats["server_member_count"] = _get_guild_member_count()
+    return JSONResponse(stats)
