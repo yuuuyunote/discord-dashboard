@@ -97,36 +97,18 @@ async def dashboard_page(request: Request):
         })
 
     stats["server_member_count"] = _get_guild_member_count()
-
-    # 追加機能データ取得
-    leave_stats      = database.get_leave_reason_stats()
-    heatmap_raw      = database.get_activity_heatmap()
-    msg_ranking      = database.get_user_message_ranking(limit=10)
-    new_user_analysis= database.get_new_user_analysis()
-    creator_ranking  = database.get_invite_creator_ranking()
-
-    # ヒートマップデータをJSON化（dow=0:日曜〜6:土曜）
-    heatmap_data = [[0]*24 for _ in range(7)]
-    for row in heatmap_raw:
-        dow  = int(row["dow"])
-        hour = int(row["hour"])
-        heatmap_data[dow][hour] = row["count"]
-
     return templates.TemplateResponse("dashboard.html", {
-        "request":          request,
-        "session":          session,
-        "stats":            stats,
-        "invites":          invites,
-        "ch_ranking":       ch_ranking_named,
-        "recent_puns":      recent_puns,
-        "mod_stats":        mod_stats,
-        "join_graph":       json.dumps(join_graph, ensure_ascii=False),
-        "leave_stats":      json.dumps(leave_stats, ensure_ascii=False),
-        "heatmap_data":     json.dumps(heatmap_data, ensure_ascii=False),
-        "msg_ranking":      msg_ranking,
-        "new_user_analysis":new_user_analysis,
-        "creator_ranking":  creator_ranking,
+        "request":     request,
+        "session":     session,
+        "stats":       stats,
+        "invites":     invites,
+        "ch_ranking":  ch_ranking_named,
+        "recent_puns": recent_puns,
+        "mod_stats":   mod_stats,
+        "join_graph":  json.dumps(join_graph, ensure_ascii=False),
     })
+
+
 
 
 @router.get("/search", include_in_schema=False)
