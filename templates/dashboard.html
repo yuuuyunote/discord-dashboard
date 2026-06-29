@@ -171,52 +171,6 @@
         </div>
       </div>
 
-      <!-- 新規ユーザー分析 & 退室理由 -->
-      <div class="two-col fade-up fade-up-2" style="margin-bottom:24px;">
-
-        <!-- 新規ユーザー分析パネル（機能38） -->
-        <div class="card">
-          <div class="card-inner">
-            <div class="section-head">
-              <h2>新規ユーザー分析</h2>
-              <span class="badge badge-gray">直近30日</span>
-            </div>
-            <div class="analysis-grid">
-              <div class="analysis-item">
-                <div class="analysis-item-label"><i class="fa-solid fa-user-plus"></i> 新規入室</div>
-                <div class="analysis-item-value">{{ new_user_analysis.total_new }}<span>人</span></div>
-              </div>
-              <div class="analysis-item">
-                <div class="analysis-item-label"><i class="fa-solid fa-message"></i> 平均発言数</div>
-                <div class="analysis-item-value">{{ new_user_analysis.avg_messages }}<span>件</span></div>
-              </div>
-              <div class="analysis-item">
-                <div class="analysis-item-label"><i class="fa-solid fa-person-running"></i> 即抜け率</div>
-                <div class="analysis-item-value">{{ new_user_analysis.instant_leave_rate }}<span>%</span></div>
-              </div>
-              <div class="analysis-item">
-                <div class="analysis-item-label"><i class="fa-solid fa-check"></i> 在籍継続率</div>
-                <div class="analysis-item-value">{{ new_user_analysis.still_member_rate }}<span>%</span></div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- 退室理由の分類（機能34） -->
-        <div class="card">
-          <div class="card-inner">
-            <div class="section-head">
-              <h2>退室理由の分類</h2>
-              <span class="badge badge-gray">全期間</span>
-            </div>
-            <div style="position:relative; height:160px; max-width:100%; overflow:hidden;">
-              <canvas id="leaveChart" style="max-width:100%;"></canvas>
-            </div>
-          </div>
-        </div>
-
-      </div>
-
       <!-- チャンネル熱量 & 最近の処罰 -->
       <div class="two-col fade-up fade-up-2" style="margin-bottom:24px;">
         <div class="card">
@@ -282,86 +236,6 @@
 
       <!-- 発言数ランキング & 招待作成者ランキング（機能37・39） -->
       <div class="two-col fade-up fade-up-3" style="margin-bottom:24px;">
-
-        <div class="card">
-          <div class="card-inner">
-            <div class="section-head">
-              <h2>発言数ランキング</h2>
-              <span class="badge badge-gray">全期間</span>
-            </div>
-            {% if msg_ranking %}
-            <div>
-              {% for u in msg_ranking %}
-              <div class="ranking-bar-item">
-                <span class="ranking-num">{{ loop.index }}</span>
-                <a href="/search?q={{ u.user_id }}" class="ranking-name" style="color:var(--text); text-decoration:none;">
-                  {{ u.username or u.user_id }}
-                </a>
-                <span class="ranking-count">{{ "{:,}".format(u.msg_count) }}件</span>
-              </div>
-              {% endfor %}
-            </div>
-            {% else %}
-            <p style="color:var(--text-sub); font-size:13px;">データなし</p>
-            {% endif %}
-          </div>
-        </div>
-
-        <div class="card">
-          <div class="card-inner">
-            <div class="section-head">
-              <h2>招待作成者ランキング</h2>
-              <span class="badge badge-gray">入室数順</span>
-            </div>
-            {% if creator_ranking %}
-            <div>
-              {% for c in creator_ranking %}
-              <div class="ranking-bar-item">
-                <span class="ranking-num">{{ loop.index }}</span>
-                <span class="ranking-name" style="font-family:'DM Mono',monospace; font-size:11px;">{{ c.creator_id }}</span>
-                <span class="ranking-count">{{ c.total_joins or 0 }}人</span>
-              </div>
-              {% endfor %}
-            </div>
-            {% else %}
-            <p style="color:var(--text-sub); font-size:13px;">データなし</p>
-            {% endif %}
-          </div>
-        </div>
-
-      </div>
-
-      <!-- 時間帯別ヒートマップ（機能36） -->
-      <div class="card fade-up fade-up-3" style="margin-bottom:24px;">
-        <div class="card-inner">
-          <div class="section-head">
-            <h2>活動ヒートマップ</h2>
-            <span class="badge badge-gray">曜日×時間帯</span>
-          </div>
-          <div class="heatmap-wrap">
-            <table class="heatmap-table" id="heatmapTable">
-              <thead>
-                <tr>
-                  <th></th>
-                  {% for h in range(24) %}
-                  <th>{{ h }}</th>
-                  {% endfor %}
-                </tr>
-              </thead>
-              <tbody id="heatmapBody"></tbody>
-            </table>
-          </div>
-          <div style="display:flex; align-items:center; gap:8px; margin-top:12px; font-size:11px; color:var(--text-sub); font-family:'DM Mono',monospace;">
-            <span>少</span>
-            <div style="display:flex; gap:2px;">
-              {% for i in range(5) %}
-              <div style="width:14px; height:14px; border-radius:2px; background:rgba(0,200,150,{{ i * 0.25 }});"></div>
-              {% endfor %}
-            </div>
-            <span>多</span>
-          </div>
-        </div>
-      </div>
 
       <!-- 招待リンク一覧 -->
       <div class="card fade-up fade-up-4" style="margin-bottom:24px;">
@@ -489,59 +363,6 @@
         }
       }
     });
-
-    // 退室理由の円グラフ
-    const leaveData = {{ leave_stats | safe }};
-    const leaveCtx = document.getElementById('leaveChart').getContext('2d');
-    new Chart(leaveCtx, {
-      type: 'doughnut',
-      data: {
-        labels: ['BAN', 'KICK', '即抜け', '通常退室'],
-        datasets: [{ data: [leaveData.ban, leaveData.kick, leaveData.instant, leaveData.long_leave], backgroundColor: ['rgba(220,60,60,0.7)', 'rgba(220,140,40,0.7)', 'rgba(100,100,100,0.7)', 'rgba(0,200,150,0.7)'], borderWidth: 0 }]
-      },
-      options: {
-        responsive: true, maintainAspectRatio: false,
-        plugins: { legend: { position: 'right', labels: { color: 'var(--text-sub)', font: { size: 11 }, boxWidth: 12 } } }
-      }
-    });
-
-    // ヒートマップ描画
-    const heatmapData = {{ heatmap_data | safe }};
-    const days = ['日', '月', '火', '水', '木', '金', '土'];
-    const tbody = document.getElementById('heatmapBody');
-    const maxVal = Math.max(...heatmapData.flat(), 1);
-    days.forEach((day, dow) => {
-      const tr = document.createElement('tr');
-      const th = document.createElement('th');
-      th.textContent = day;
-      tr.appendChild(th);
-      for (let h = 0; h < 24; h++) {
-        const td = document.createElement('td');
-        const val = heatmapData[dow][h] || 0;
-        const intensity = val / maxVal;
-        td.style.background = `rgba(0,200,150,${intensity.toFixed(2)})`;
-        td.title = `${day}曜 ${h}時: ${val}件`;
-        tr.appendChild(td);
-      }
-      tbody.appendChild(tr);
-    });
-
-    // 統計カード自動更新（5分ごと）
-    async function refreshStats() {
-      try {
-        const res  = await fetch('/api/stats/realtime');
-        const data = await res.json();
-        if (data.error) return;
-        document.getElementById('stat-members').innerHTML    = `${data.server_member_count}<span>人</span>`;
-        document.getElementById('stat-active').innerHTML     = `${data.active_rate}<span>%</span>`;
-        document.getElementById('stat-messages').innerHTML   = `${data.total_messages.toLocaleString()}<span>件</span>`;
-        document.getElementById('stat-punishments').innerHTML= `${data.total_punishments}<span>件</span>`;
-        const now = new Date();
-        document.getElementById('lastUpdated').textContent = `更新: ${now.getHours()}:${String(now.getMinutes()).padStart(2,'0')}`;
-      } catch(e) {}
-    }
-    setInterval(refreshStats, 5 * 60 * 1000);
-    refreshStats();
 
     // 招待メモ保存
     document.querySelectorAll('.memo-form').forEach(form => {
