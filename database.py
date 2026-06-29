@@ -487,3 +487,365 @@ def get_all_invites_for_csv() -> list[dict]:
 
 def delete_punishment(punishment_id: int) -> None:
     _execute("DELETE FROM punishments WHERE id=%s", (punishment_id,))
+
+
+# ─────────────────────────────────────────────────────────
+# 機能34・36・37・38・39 追加クエリ
+# ─────────────────────────────────────────────────────────
+
+def get_leave_reason_stats() -> dict:
+    """退室理由の自動分類（機能34）"""
+    # BAN
+    ban = (_execute("SELECT COUNT(*) AS c FROM punishments WHERE punishment_type='BAN'") or [{"c":0}])[0]["c"] or 0
+    # KICK
+    kick = (_execute("SELECT COUNT(*) AS c FROM punishments WHERE punishment_type='KICK'") or [{"c":0}])[0]["c"] or 0
+    # 即抜け（24時間以内退室）
+    instant = (_execute("""
+        SELECT COUNT(*) AS c FROM join_logs
+        WHERE left_at IS NOT NULL
+        AND (left_at::timestamp - joined_at::timestamp) < INTERVAL '24 hours'
+    """) or [{"c":0}])[0]["c"] or 0
+    # 長期在籍後の退室
+    long_leave = (_execute("""
+        SELECT COUNT(*) AS c FROM join_logs
+        WHERE left_at IS NOT NULL
+        AND (left_at::timestamp - joined_at::timestamp) >= INTERVAL '24 hours'
+    """) or [{"c":0}])[0]["c"] or 0
+    return {
+        "ban": ban,
+        "kick": kick,
+        "instant": instant,
+        "long_leave": long_leave,
+    }
+
+
+def get_activity_heatmap() -> list[dict]:
+    """曜日×時間帯の発言数ヒートマップ（機能36）"""
+    return _execute("""
+        SELECT
+            EXTRACT(DOW FROM sent_at::timestamp)::INTEGER  AS dow,
+            EXTRACT(HOUR FROM (sent_at::timestamp AT TIME ZONE 'Asia/Tokyo'))::INTEGER AS hour,
+            COUNT(*) AS count
+        FROM activity_logs
+        GROUP BY dow, hour
+        ORDER BY dow, hour
+    """)
+
+
+def get_user_message_ranking(limit: int = 10) -> list[dict]:
+    """発言数ランキング（ユーザー別）（機能37）"""
+    rows = _execute("""
+        SELECT a.user_id, u.username, COUNT(*) AS msg_count
+        FROM activity_logs a
+        LEFT JOIN users u ON u.user_id = a.user_id
+        GROUP BY a.user_id, u.username
+        ORDER BY msg_count DESC
+        LIMIT %s
+    """, (limit,))
+    return rows
+
+
+def get_new_user_analysis() -> dict:
+    """直近30日の新規ユーザー分析（機能38）"""
+    # 直近30日の新規入室者
+    new_users = _execute("""
+        SELECT user_id FROM join_logs
+        WHERE joined_at >= (NOW() - INTERVAL '30 days')::TEXT
+        AND left_at IS NULL
+    """)
+    new_user_ids = [r["user_id"] for r in new_users]
+    total = len(new_user_ids)
+
+    if total == 0:
+        return {
+            "total_new": 0,
+            "avg_messages": 0,
+            "instant_leave_rate": 0,
+            "still_member_rate": 0,
+        }
+
+    # 平均発言数
+    avg_msg = (_execute("""
+        SELECT ROUND(AVG(cnt),1) AS avg FROM (
+            SELECT user_id, COUNT(*) AS cnt
+            FROM activity_logs
+            WHERE user_id = ANY(%s::text[])
+            GROUP BY user_id
+        ) t
+    """, (new_user_ids,)) or [{"avg": 0}])[0]["avg"] or 0
+
+    # 即抜け率
+    instant = (_execute("""
+        SELECT COUNT(*) AS c FROM join_logs
+        WHERE joined_at >= (NOW() - INTERVAL '30 days')::TEXT
+        AND left_at IS NOT NULL
+        AND (left_at::timestamp - joined_at::timestamp) < INTERVAL '24 hours'
+    """) or [{"c":0}])[0]["c"] or 0
+
+    # 在籍中の割合
+    still = (_execute("""
+        SELECT COUNT(*) AS c FROM join_logs
+        WHERE joined_at >= (NOW() - INTERVAL '30 days')::TEXT
+        AND left_at IS NULL
+    """) or [{"c":0}])[0]["c"] or 0
+
+    all_joins = (_execute("""
+        SELECT COUNT(*) AS c FROM join_logs
+        WHERE joined_at >= (NOW() - INTERVAL '30 days')::TEXT
+    """) or [{"c":0}])[0]["c"] or 1
+
+    return {
+        "total_new": total,
+        "avg_messages": float(avg_msg),
+        "instant_leave_rate": round(instant / all_joins * 100, 1),
+        "still_member_rate": round(still / all_joins * 100, 1),
+    }
+
+
+def get_invite_creator_ranking() -> list[dict]:
+    """招待リンク作成者別ランキング（機能39）"""
+    return _execute("""
+        SELECT
+            i.creator_id,
+            COUNT(DISTINCT jl.user_id)                    AS total_joins,
+            SUM(i.total_messages)                         AS total_messages,
+            ROUND(AVG(i.instant_leave * 100.0 /
+                NULLIF((SELECT COUNT(*) FROM join_logs j2
+                        WHERE j2.invite_code = i.code), 0)), 1) AS avg_leave_rate
+        FROM invites i
+        LEFT JOIN join_logs jl ON jl.invite_code = i.code
+        GROUP BY i.creator_id
+        ORDER BY total_joins DESC
+        LIMIT 10
+    """)
+
+
+def get_punishment_filtered(
+    punishment_type: str = "",
+    executor: str = "",
+    days: int = 0,
+    limit: int = 50
+) -> list[dict]:
+    """処罰履歴フィルター検索（機能46）"""
+    conditions = []
+    args = []
+
+    if punishment_type:
+        conditions.append("punishment_type = %s")
+        args.append(punishment_type)
+    if executor:
+        conditions.append("executor ILIKE %s")
+        args.append(f"%{executor}%")
+    if days > 0:
+        conditions.append(f"executed_at >= (NOW() - INTERVAL '{days} days')::TEXT")
+
+    where = "WHERE " + " AND ".join(conditions) if conditions else ""
+    args.append(limit)
+
+    return _execute(f"""
+        SELECT * FROM punishments
+        {where}
+        ORDER BY executed_at DESC
+        LIMIT %s
+    """, tuple(args))
+
+
+# ─────────────────────────────────────────────────────────
+# 機能36：ヒートマップ用データ
+# ─────────────────────────────────────────────────────────
+
+def get_activity_heatmap() -> list[dict]:
+    """曜日×時間帯の発言数ヒートマップデータ（JST換算）"""
+    return _execute("""
+        SELECT
+            EXTRACT(DOW FROM (sent_at::timestamp AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Tokyo'))::INTEGER AS dow,
+            EXTRACT(HOUR FROM (sent_at::timestamp AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Tokyo'))::INTEGER AS hour,
+            COUNT(*) AS cnt
+        FROM activity_logs
+        GROUP BY dow, hour
+        ORDER BY dow, hour
+    """)
+
+
+# ─────────────────────────────────────────────────────────
+# 機能37：発言数ランキング
+# ─────────────────────────────────────────────────────────
+
+def get_user_message_ranking(period_days: int = 30, limit: int = 10) -> list[dict]:
+    """期間内の発言数ランキング"""
+    if period_days == 0:
+        return _execute("""
+            SELECT a.user_id, u.username, COUNT(*) AS msg_count
+            FROM activity_logs a
+            LEFT JOIN users u ON u.user_id = a.user_id
+            GROUP BY a.user_id, u.username
+            ORDER BY msg_count DESC
+            LIMIT %s
+        """, (limit,))
+    return _execute("""
+        SELECT a.user_id, u.username, COUNT(*) AS msg_count
+        FROM activity_logs a
+        LEFT JOIN users u ON u.user_id = a.user_id
+        WHERE a.sent_at >= (NOW() - INTERVAL '1 day' * %s)::TEXT
+        GROUP BY a.user_id, u.username
+        ORDER BY msg_count DESC
+        LIMIT %s
+    """, (period_days, limit))
+
+
+# ─────────────────────────────────────────────────────────
+# 機能38：新規ユーザー分析パネル
+# ─────────────────────────────────────────────────────────
+
+def get_new_user_stats(days: int = 30) -> dict:
+    """直近N日の新規ユーザー分析"""
+    # 新規入室数
+    new_joins = (_execute("""
+        SELECT COUNT(*) AS c FROM join_logs
+        WHERE joined_at >= (NOW() - INTERVAL '1 day' * %s)::TEXT
+    """, (days,)) or [{"c": 0}])[0]["c"] or 0
+
+    # 即抜け数
+    instant = (_execute("""
+        SELECT COUNT(*) AS c FROM join_logs
+        WHERE joined_at >= (NOW() - INTERVAL '1 day' * %s)::TEXT
+        AND left_at IS NOT NULL
+        AND (left_at::timestamp - joined_at::timestamp) < INTERVAL '24 hours'
+    """, (days,)) or [{"c": 0}])[0]["c"] or 0
+
+    # 発言したユーザー数（新規のみ）
+    active_new = (_execute("""
+        SELECT COUNT(DISTINCT a.user_id) AS c
+        FROM activity_logs a
+        INNER JOIN join_logs j ON j.user_id = a.user_id
+        WHERE j.joined_at >= (NOW() - INTERVAL '1 day' * %s)::TEXT
+        AND a.sent_at >= (NOW() - INTERVAL '1 day' * %s)::TEXT
+    """, (days, days)) or [{"c": 0}])[0]["c"] or 0
+
+    # 7日定着率
+    retained_7d = (_execute("""
+        SELECT COUNT(*) AS c FROM retention_checks
+        WHERE joined_at >= (NOW() - INTERVAL '1 day' * %s)::TEXT
+        AND check_7d = TRUE
+    """, (days,)) or [{"c": 0}])[0]["c"] or 0
+
+    instant_rate  = round(instant / new_joins * 100, 1) if new_joins else 0.0
+    active_rate   = round(active_new / new_joins * 100, 1) if new_joins else 0.0
+    retained_rate = round(retained_7d / new_joins * 100, 1) if new_joins else 0.0
+
+    return {
+        "new_joins":      new_joins,
+        "instant":        instant,
+        "instant_rate":   instant_rate,
+        "active_new":     active_new,
+        "active_rate":    active_rate,
+        "retained_7d":    retained_7d,
+        "retained_rate":  retained_rate,
+    }
+
+
+# ─────────────────────────────────────────────────────────
+# 機能39：招待リンク作成者別ランキング
+# ─────────────────────────────────────────────────────────
+
+def get_invite_creator_ranking() -> list[dict]:
+    """招待リンク作成者別の入室数・貢献スコアランキング"""
+    return _execute("""
+        SELECT
+            i.creator_id,
+            COUNT(DISTINCT i.code)      AS invite_count,
+            COUNT(DISTINCT jl.id)       AS total_joins,
+            SUM(i.total_messages)       AS total_messages,
+            SUM(i.total_vc_sec)         AS total_vc_sec,
+            SUM(i.instant_leave)        AS total_instant_leave,
+            SUM(i.total_messages) + ROUND(SUM(i.total_vc_sec) / 60.0) AS contribution_score
+        FROM invites i
+        LEFT JOIN join_logs jl ON jl.invite_code = i.code
+        GROUP BY i.creator_id
+        ORDER BY contribution_score DESC
+        LIMIT 20
+    """)
+
+
+# ─────────────────────────────────────────────────────────
+# 機能34：退室理由分類
+# ─────────────────────────────────────────────────────────
+
+def get_leave_reason_stats() -> dict:
+    """退室理由の分類統計"""
+    # BAN退室
+    ban_count = (_execute("""
+        SELECT COUNT(DISTINCT p.user_id) AS c FROM punishments p
+        WHERE p.punishment_type = 'BAN'
+    """) or [{"c": 0}])[0]["c"] or 0
+
+    # KICK退室
+    kick_count = (_execute("""
+        SELECT COUNT(DISTINCT p.user_id) AS c FROM punishments p
+        WHERE p.punishment_type = 'KICK'
+    """) or [{"c": 0}])[0]["c"] or 0
+
+    # 即抜け（24時間以内）
+    instant_count = (_execute("""
+        SELECT COUNT(*) AS c FROM join_logs
+        WHERE left_at IS NOT NULL
+        AND (left_at::timestamp - joined_at::timestamp) < INTERVAL '24 hours'
+    """) or [{"c": 0}])[0]["c"] or 0
+
+    # 長期在籍後の退室（7日以上）
+    long_count = (_execute("""
+        SELECT COUNT(*) AS c FROM join_logs
+        WHERE left_at IS NOT NULL
+        AND (left_at::timestamp - joined_at::timestamp) >= INTERVAL '7 days'
+    """) or [{"c": 0}])[0]["c"] or 0
+
+    # 短期（24時間〜7日）
+    short_count = (_execute("""
+        SELECT COUNT(*) AS c FROM join_logs
+        WHERE left_at IS NOT NULL
+        AND (left_at::timestamp - joined_at::timestamp) >= INTERVAL '24 hours'
+        AND (left_at::timestamp - joined_at::timestamp) < INTERVAL '7 days'
+    """) or [{"c": 0}])[0]["c"] or 0
+
+    return {
+        "ban":     ban_count,
+        "kick":    kick_count,
+        "instant": instant_count,
+        "short":   short_count,
+        "long":    long_count,
+    }
+
+
+# ─────────────────────────────────────────────────────────
+# 機能46：処罰履歴フィルター検索
+# ─────────────────────────────────────────────────────────
+
+def get_punishments_filtered(
+    punishment_type: str = "",
+    executor: str = "",
+    days: int = 0,
+    limit: int = 50
+) -> list[dict]:
+    """処罰履歴をフィルタリングして返す"""
+    conditions = []
+    args = []
+
+    if punishment_type:
+        conditions.append("punishment_type = %s")
+        args.append(punishment_type)
+    if executor:
+        conditions.append("executor ILIKE %s")
+        args.append(f"%{executor}%")
+    if days > 0:
+        conditions.append("executed_at >= (NOW() - INTERVAL '1 day' * %s)::TEXT")
+        args.append(days)
+
+    where = ("WHERE " + " AND ".join(conditions)) if conditions else ""
+    args.append(limit)
+
+    return _execute(f"""
+        SELECT * FROM punishments
+        {where}
+        ORDER BY executed_at DESC
+        LIMIT %s
+    """, tuple(args))
