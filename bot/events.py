@@ -313,6 +313,10 @@ async def _audit_log_poller(bot: discord.Client) -> None:
                 elif action == discord.AuditLogAction.kick:
                     punishment_type = "KICK"
 
+                # ── Automod タイムアウト ───────────────────
+                elif action == discord.AuditLogAction.automod_timeout:
+                    punishment_type = "TIMEOUT"
+
                 # ── TIMEOUT / TIMEOUT解除 ─────────────────
                 elif action == discord.AuditLogAction.member_update:
                     is_timeout        = False
@@ -324,7 +328,6 @@ async def _audit_log_poller(bot: discord.Client) -> None:
                         before_timeout = getattr(before_changes, 'timed_out_until', None)
 
                         if after_timeout is not None:
-                            # after が None → 解除、値あり → 実行
                             if str(after_timeout) == "None" or after_timeout is None:
                                 is_timeout_remove = True
                             else:
@@ -339,7 +342,6 @@ async def _audit_log_poller(bot: discord.Client) -> None:
                         try:
                             changes_str = str(entry.changes)
                             if 'timed_out_until' in changes_str or 'timeout' in changes_str.lower():
-                                # afterにNoneがあれば解除、なければ実行
                                 if "'after': None" in changes_str or '"after": null' in changes_str:
                                     is_timeout_remove = True
                                 else:
