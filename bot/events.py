@@ -375,6 +375,20 @@ async def _audit_log_poller(bot: discord.Client) -> None:
                 if already:
                     continue
 
+                # TIMEOUT解除の場合：最新のTIMEOUTレコード1件のみ自動削除
+                if punishment_type == "TIMEOUT_REMOVE":
+                    # executed_atで降順ソートして最新のTIMEOUTを1件取得
+                    latest_timeout = next(
+                        (p for p in sorted(existing, key=lambda x: x["executed_at"], reverse=True)
+                         if p["punishment_type"] == "TIMEOUT"),
+                        None
+                    )
+                    if latest_timeout:
+                        database.delete_punishment(latest_timeout["id"])
+                        print(f"[Bot] 最新のTIMEOUTを削除: id={latest_timeout['id']} | 対象: {target_name}")
+                    # TIMEOUT_REMOVEはDBに記録せず終了
+                    continue
+
                 database.add_punishment(
                     user_id=target_id,
                     target_name=target_name,
