@@ -192,6 +192,18 @@ def search_users(query: str) -> list[dict]:
 # ─────────────────────────────────────────────────────────
 
 def add_join_log(user_id: str, invite_code: Optional[str], joined_at: str) -> None:
+    # 重複防止：同一ユーザーの未退出ログが直近5分以内にあればスキップ
+    # （discord.pyのon_member_joinが再接続等で複数回発火するケースに対応）
+    existing = _execute("""
+        SELECT id FROM join_logs
+        WHERE user_id=%s
+        AND left_at IS NULL
+        AND joined_at >= (NOW() - INTERVAL '5 minutes')::TEXT
+        LIMIT 1
+    """, (user_id,))
+    if existing:
+        return
+
     _execute(
         "INSERT INTO join_logs (user_id, invite_code, joined_at) VALUES (%s,%s,%s)",
         (user_id, invite_code, joined_at)
