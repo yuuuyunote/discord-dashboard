@@ -140,6 +140,11 @@ def setup_events(bot: discord.Client) -> None:
         if message.guild.id != GUILD_ID:
             return
 
+        # システムメッセージ（入室通知・ブースト通知等）は発言として扱わない
+        # MessageType.default = 通常のユーザー発言のみを対象とする
+        if message.type != discord.MessageType.default:
+            return
+
         user_id = str(message.author.id)
 
         database.add_activity_log(
