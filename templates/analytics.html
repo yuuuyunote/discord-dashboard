@@ -7,93 +7,6 @@
   <link rel="stylesheet" href="/static/style.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
-  <style>
-    .dash-layout { display: flex; min-height: 100vh; padding-top: var(--nav-h); }
-    .sidebar { width: 220px; flex-shrink: 0; border-right: 1px solid var(--border); padding: 32px 0; position: fixed; top: var(--nav-h); left: 0; bottom: 0; overflow-y: auto; background: var(--bg-card); }
-    .sidebar-label { font-family: 'DM Mono', monospace; font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-sub); padding: 0 20px; margin-bottom: 8px; }
-    .sidebar-nav { display: flex; flex-direction: column; gap: 2px; padding: 0 12px; }
-    .sidebar-nav a { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: var(--radius-sm); font-size: 14px; font-weight: 500; color: var(--text-sub); transition: all var(--transition); text-decoration: none; }
-    .sidebar-nav a:hover { color: var(--text); background: var(--border); }
-    .sidebar-nav a.active { color: var(--accent); background: var(--accent-light); }
-    .sidebar-nav a i { width: 16px; text-align: center; font-size: 13px; }
-    .sidebar-divider { border: none; border-top: 1px solid var(--border); margin: 16px 20px; }
-    .main-content { margin-left: 220px; flex: 1; padding: 40px; max-width: calc(100% - 220px); }
-    .nav-top { position: fixed; top: 0; left: 0; right: 0; height: var(--nav-h); background: var(--bg-nav); backdrop-filter: blur(12px); border-bottom: 1px solid var(--border); z-index: 1000; display: flex; align-items: center; padding: 0 32px; gap: 16px; transform: translateZ(0); }
-    .nav-top-logo { font-family: 'DM Mono', monospace; font-size: 13px; font-weight: 500; color: var(--accent); flex: 1; }
-    .nav-top-user { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--text-sub); }
-    .nav-top-avatar { width: 28px; height: 28px; border-radius: 50%; overflow: hidden; background: var(--border); }
-    .nav-top-avatar img { width: 100%; height: 100%; object-fit: cover; }
-    .page-header { margin-bottom: 32px; }
-    .page-header-label { font-family: 'DM Mono', monospace; font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent); margin-bottom: 6px; }
-    .page-header h1 { font-family: 'DM Serif Display', serif; font-size: 28px; color: var(--text); }
-    .page-header p { font-size: 13px; color: var(--text-sub); margin-top: 4px; }
-    .section-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
-    .section-head h2 { font-family: 'DM Serif Display', serif; font-size: 20px; color: var(--text); }
-    .card-inner { padding: 24px; }
-    .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 24px; }
-    .three-col { display: grid; grid-template-columns: repeat(3,1fr); gap: 16px; margin-bottom: 24px; }
-
-    /* 統計ミニカード */
-    .stat-mini { padding: 20px; border-radius: var(--radius); }
-    .stat-mini-label { font-family: 'DM Mono', monospace; font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-sub); margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
-    .stat-mini-label i { color: var(--accent); }
-    .stat-mini-value { font-family: 'DM Serif Display', serif; font-size: 28px; color: var(--text); line-height: 1; }
-    .stat-mini-value span { font-size: 14px; color: var(--accent); }
-    .stat-mini-sub { font-size: 11px; color: var(--text-sub); margin-top: 4px; font-family: 'DM Mono', monospace; }
-
-    /* ヒートマップ */
-    .heatmap-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
-    .heatmap-grid { display: grid; grid-template-columns: 40px repeat(24, 1fr); gap: 2px; min-width: 600px; }
-    .heatmap-header { font-family: 'DM Mono', monospace; font-size: 9px; color: var(--text-sub); text-align: center; padding: 2px 0; }
-    .heatmap-label { font-family: 'DM Mono', monospace; font-size: 10px; color: var(--text-sub); display: flex; align-items: center; justify-content: flex-end; padding-right: 6px; }
-    .heatmap-cell { height: 20px; border-radius: 2px; transition: opacity 0.2s; cursor: default; }
-    .heatmap-cell:hover { opacity: 0.7; }
-
-    /* テーブル */
-    .data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-    .data-table th { font-family: 'DM Mono', monospace; font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-sub); padding: 10px 16px; text-align: left; border-bottom: 1px solid var(--border); }
-    .data-table td { padding: 12px 16px; border-bottom: 1px solid var(--border); color: var(--text); vertical-align: middle; }
-    .data-table tr:last-child td { border-bottom: none; }
-    .data-table tr:hover td { background: var(--accent-light); }
-
-    /* バッジ */
-    .badge { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 100px; font-family: 'DM Mono', monospace; font-size: 11px; font-weight: 500; }
-    .badge-green { background: var(--accent-light); color: var(--accent); }
-    .badge-gray { background: var(--border); color: var(--text-sub); }
-
-    /* 円グラフ */
-    .donut-wrap { position: relative; height: 200px; max-width: 200px; margin: 0 auto; }
-
-    /* タブ */
-    .tab-btns { display: flex; gap: 8px; margin-bottom: 16px; }
-    .tab-btn { padding: 6px 14px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: none; color: var(--text-sub); font-size: 13px; cursor: pointer; transition: all var(--transition); font-family: 'Noto Sans JP', sans-serif; }
-    .tab-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
-    .tab-btn:hover:not(.active) { border-color: var(--accent); color: var(--accent); }
-
-    /* バーランキング */
-    .rank-bar-wrap { display: flex; flex-direction: column; gap: 10px; }
-    .rank-bar-item { display: flex; align-items: center; gap: 10px; }
-    .rank-num { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--text-sub); width: 20px; text-align: center; }
-    .rank-name { font-size: 13px; color: var(--text); width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .rank-track { flex: 1; height: 8px; background: var(--border); border-radius: 4px; overflow: hidden; }
-    .rank-fill { height: 100%; background: var(--accent); border-radius: 4px; }
-    .rank-count { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--text-sub); width: 56px; text-align: right; }
-
-    .dash-mobile-nav { display: none; position: fixed; bottom: 0; left: 0; right: 0; height: 60px; background: var(--bg-card); border-top: 1px solid var(--border); z-index: 1000; padding: 0 8px; align-items: center; justify-content: space-around; transform: translateZ(0); }
-    .dash-mobile-nav a { display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 8px 16px; border-radius: var(--radius-sm); color: var(--text-sub); font-size: 10px; font-family: 'DM Mono', monospace; text-decoration: none; transition: all var(--transition); flex: 1; text-align: center; }
-    .dash-mobile-nav a i { font-size: 18px; }
-    .dash-mobile-nav a.active { color: var(--accent); }
-
-    @media (max-width: 768px) {
-      .sidebar { display: none !important; }
-      .main-content { margin-left: 0 !important; max-width: 100% !important; padding: 20px 16px 80px !important; }
-      .dash-mobile-nav { display: flex; }
-      .two-col { grid-template-columns: 1fr !important; }
-      .three-col { grid-template-columns: repeat(2,1fr) !important; }
-      .page-header h1 { font-size: 22px !important; }
-      .rank-name { width: 100px !important; }
-    }
-  </style>
 </head>
 <body>
   <nav class="nav-top">
@@ -269,14 +182,14 @@
       <div class="card fade-up" style="margin-bottom:24px;">
         <div class="card-inner">
           <div class="section-head">
-            <h2>招待作成者ランキング</h2>
+            <h2>招待数ランキング</h2>
             <span class="badge badge-gray">貢献スコア順</span>
           </div>
           {% if creator_ranking %}
           <div style="overflow-x:auto; -webkit-overflow-scrolling:touch;">
             <table class="data-table" style="min-width:500px;">
               <thead>
-                <tr><th>作成者</th><th>リンク数</th><th>入室数</th><th>総発言数</th><th>貢献スコア</th></tr>
+                <tr><th>作成者</th><th>リンク数</th><th>招待数</th><th>総発言数</th><th>貢献スコア</th></tr>
               </thead>
               <tbody>
                 {% for r in creator_ranking %}
