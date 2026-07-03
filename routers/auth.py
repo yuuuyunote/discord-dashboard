@@ -86,6 +86,20 @@ def require_auth(request: Request):
 
 # ─── ルート ───────────────────────────────────────────────
 
+@router.head("/", include_in_schema=False)
+async def root_head():
+    """UptimeRobot等のヘルスチェック用（HEADリクエスト対応）"""
+    from fastapi.responses import Response
+    return Response(status_code=200)
+
+
+@router.head("/login", include_in_schema=False)
+async def login_head():
+    """UptimeRobot等のヘルスチェック用（HEADリクエスト対応）"""
+    from fastapi.responses import Response
+    return Response(status_code=200)
+
+
 @router.get("/", include_in_schema=False)
 async def root(request: Request):
     session = get_session(request)
