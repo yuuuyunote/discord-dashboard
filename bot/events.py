@@ -2,6 +2,7 @@
 bot/events.py
 全Botイベントハンドラ
 改善：Wick等外部Bot処罰の確実な検知
+改善：招待リンク検出のレースコンディション・API反映遅延対策
 """
 
 import asyncio
@@ -24,6 +25,9 @@ AUDIT_POLL_INTERVAL = 15
 _invite_cache: dict[str, int] = {}
 _last_audit_check: datetime = datetime.now(timezone.utc)
 
+# 招待検出の同時実行制御用ロック（レースコンディション対策）
+_invite_lock = asyncio.Lock()
+
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -42,6 +46,32 @@ def _find_used_invite(before: dict[str, int], after: dict[str, int]) -> Optional
         if uses > before.get(code, 0):
             return code
     return None
+
+
+async def _detect_used_invite(guild: discord.Guild) -> Optional[str]:
+    """
+    使用された招待リンクを検出する。
+
+    - asyncio.Lockで直列化し、複数人が同時入室してもキャッシュの競合を防ぐ
+    - Discord API側のuses反映遅延に備え、最大3回・1.5秒間隔でリトライする
+    """
+    global _invite_cache
+
+    async with _invite_lock:
+        before = _invite_cache
+        after  = before
+        used_code: Optional[str] = None
+
+        for attempt in range(3):
+            after     = await _fetch_invite_cache(guild)
+            used_code = _find_used_invite(before, after)
+            if used_code:
+                break
+            if attempt < 2:
+                await asyncio.sleep(1.5)
+
+        _invite_cache = after
+        return used_code
 
 
 def setup_events(bot: discord.Client) -> None:
@@ -77,7 +107,6 @@ def setup_events(bot: discord.Client) -> None:
 
     @bot.event
     async def on_member_join(member: discord.Member) -> None:
-        global _invite_cache
         if member.guild.id != GUILD_ID:
             return
 
@@ -91,9 +120,7 @@ def setup_events(bot: discord.Client) -> None:
             joined_at=joined_at,
         )
 
-        new_cache = await _fetch_invite_cache(member.guild)
-        used_code = _find_used_invite(_invite_cache, new_cache)
-        _invite_cache = new_cache
+        used_code = await _detect_used_invite(member.guild)
 
         database.add_join_log(str(member.id), used_code, joined_at)
         database.add_retention_check(str(member.id), used_code, joined_at)
