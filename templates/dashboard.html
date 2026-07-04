@@ -245,11 +245,25 @@
     document.documentElement.setAttribute('data-theme', saved);
     chk.checked = saved === 'light';
     icon.textContent = saved === 'light' ? '🌙' : '☀️';
+
+    // Chart.jsはCSS変数(var(...))を解釈できないため、実際の色を取得するヘルパー
+    function cssVar(name) {
+      return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    }
+
     chk.addEventListener('change', () => {
       const t = chk.checked ? 'light' : 'dark';
       document.documentElement.setAttribute('data-theme', t);
       localStorage.setItem('theme', t);
       icon.textContent = t === 'light' ? '🌙' : '☀️';
+      // グラフの配色をテーマに合わせて更新
+      const tickColor = cssVar('--text-faint');
+      const gridColor = cssVar('--border');
+      joinChart.options.scales.x.ticks.color = tickColor;
+      joinChart.options.scales.y.ticks.color = tickColor;
+      joinChart.options.scales.x.grid.color  = gridColor;
+      joinChart.options.scales.y.grid.color  = gridColor;
+      joinChart.update();
     });
 
     // トースト
@@ -264,18 +278,18 @@
     // 入室数グラフ
     const graphData = {{ join_graph | safe }};
     const joinCtx = document.getElementById('joinChart').getContext('2d');
-    new Chart(joinCtx, {
+    const joinChart = new Chart(joinCtx, {
       type: 'bar',
       data: {
         labels: graphData.labels,
-        datasets: [{ label: '入室数', data: graphData.data, backgroundColor: 'rgba(232,161,62,0.3)', borderColor: 'rgba(232,161,62,0.8)', borderWidth: 1, borderRadius: 4 }]
+        datasets: [{ label: '入室数', data: graphData.data, backgroundColor: 'rgba(232,161,62,0.55)', borderColor: 'rgba(232,161,62,0.9)', borderWidth: 1, borderRadius: 4 }]
       },
       options: {
         responsive: true, maintainAspectRatio: false, resizeDelay: 0,
         plugins: { legend: { display: false } },
         scales: {
-          x: { ticks: { color: 'var(--text-sub)', font: { family: 'JetBrains Mono', size: 10 } }, grid: { color: 'var(--border)' } },
-          y: { ticks: { color: 'var(--text-sub)', font: { family: 'JetBrains Mono', size: 10 }, stepSize: 1 }, grid: { color: 'var(--border)' }, beginAtZero: true }
+          x: { ticks: { color: cssVar('--text-faint'), font: { family: 'JetBrains Mono', size: 10 } }, grid: { display: false } },
+          y: { ticks: { color: cssVar('--text-faint'), font: { family: 'JetBrains Mono', size: 10 }, stepSize: 1 }, grid: { color: cssVar('--border') }, beginAtZero: true }
         }
       }
     });
