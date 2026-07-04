@@ -103,14 +103,14 @@
           <div class="heatmap-wrap">
             <div class="heatmap-grid" id="heatmapGrid"></div>
           </div>
-          <div style="display:flex; align-items:center; gap:8px; margin-top:12px; font-size:11px; color:var(--text-sub); font-family:'DM Mono',monospace;">
+          <div style="display:flex; align-items:center; gap:8px; margin-top:12px; font-size:11px; color:var(--text-sub); font-family:'JetBrains Mono',monospace;">
             <span>少</span>
             <div style="display:flex; gap:2px;">
               <div style="width:14px; height:14px; border-radius:2px; background:var(--border);"></div>
-              <div style="width:14px; height:14px; border-radius:2px; background:rgba(0,200,150,0.2);"></div>
-              <div style="width:14px; height:14px; border-radius:2px; background:rgba(0,200,150,0.45);"></div>
-              <div style="width:14px; height:14px; border-radius:2px; background:rgba(0,200,150,0.7);"></div>
-              <div style="width:14px; height:14px; border-radius:2px; background:rgba(0,200,150,1);"></div>
+              <div style="width:14px; height:14px; border-radius:2px; background:rgba(232,161,62,0.2);"></div>
+              <div style="width:14px; height:14px; border-radius:2px; background:rgba(232,161,62,0.45);"></div>
+              <div style="width:14px; height:14px; border-radius:2px; background:rgba(232,161,62,0.7);"></div>
+              <div style="width:14px; height:14px; border-radius:2px; background:rgba(232,161,62,1);"></div>
             </div>
             <span>多</span>
           </div>
@@ -198,7 +198,7 @@
                   <td style="text-align:center;">{{ r.invite_count }}</td>
                   <td style="text-align:center;">{{ r.total_joins or 0 }}</td>
                   <td style="text-align:center;">{{ "{:,}".format(r.total_messages or 0) }}</td>
-                  <td style="font-family:'DM Mono',monospace; font-size:12px; color:var(--accent);">{{ r.contribution_score or 0 }}pt</td>
+                  <td style="font-family:'JetBrains Mono',monospace; font-size:12px; color:var(--accent);">{{ r.contribution_score or 0 }}pt</td>
                 </tr>
                 {% endfor %}
               </tbody>
@@ -269,7 +269,7 @@
           cell.style.background = 'var(--border)';
         } else {
           const alpha = 0.15 + ratio * 0.85;
-          cell.style.background = `rgba(0,200,150,${alpha.toFixed(2)})`;
+          cell.style.background = `rgba(232,161,62,${alpha.toFixed(2)})`;
         }
         cell.title = `${days[d]}曜 ${h}時: ${val}件`;
         grid.appendChild(cell);
@@ -291,11 +291,11 @@
             {{ leave_stats.ban }},
           ],
           backgroundColor: [
-            'rgba(0,200,150,0.8)',
-            'rgba(0,200,150,0.5)',
-            'rgba(0,200,150,0.3)',
-            'rgba(220,140,40,0.8)',
-            'rgba(220,60,60,0.8)',
+            'rgba(232,161,62,0.8)',
+            'rgba(232,161,62,0.5)',
+            'rgba(232,161,62,0.3)',
+            'rgba(140,142,149,0.6)',
+            'rgba(178,59,50,0.85)',
           ],
           borderWidth: 0,
         }]
