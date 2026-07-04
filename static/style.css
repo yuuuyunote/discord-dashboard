@@ -54,6 +54,7 @@ body {
   color: var(--text);
   line-height: 1.7;
   min-height: 100vh;
+  overflow-x: hidden;
   transition: background var(--transition), color var(--transition);
   -webkit-font-smoothing: antialiased;
 }
@@ -144,7 +145,7 @@ button { font-family: inherit; }
 
 .sidebar-divider { border: none; border-top: 1px solid var(--border); margin: 16px 20px; }
 
-.main-content { margin-left: 208px; flex: 1; padding: 36px 40px 60px; max-width: calc(100% - 208px); }
+.main-content { margin-left: 208px; flex: 1; min-width: 0; padding: 36px 40px 60px; max-width: calc(100% - 208px); }
 
 /* Mobile bottom nav */
 .dash-mobile-nav {
@@ -176,6 +177,7 @@ button { font-family: inherit; }
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius);
+  min-width: 0;
   transition: border-color var(--transition);
 }
 
