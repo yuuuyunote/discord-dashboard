@@ -33,6 +33,25 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _load_last_audit_check() -> datetime:
+    """
+    Bot再起動をまたいで監査ログの取りこぼしを防ぐため、
+    前回チェックした時刻をDBから復元する。
+    初回起動時（DBに記録がない場合）のみ現在時刻を使う。
+    """
+    saved = database.get_setting("last_audit_check")
+    if saved:
+        try:
+            return datetime.fromisoformat(saved)
+        except ValueError:
+            pass
+    return datetime.now(timezone.utc)
+
+
+def _save_last_audit_check(dt: datetime) -> None:
+    database.set_setting("last_audit_check", dt.isoformat())
+
+
 async def _fetch_invite_cache(guild: discord.Guild) -> dict[str, int]:
     try:
         invites = await guild.invites()
@@ -99,7 +118,7 @@ def setup_events(bot: discord.Client) -> None:
         except discord.Forbidden:
             print("[Bot] 警告: 招待リンク取得権限がありません")
 
-        _last_audit_check = datetime.now(timezone.utc)
+        _last_audit_check = _load_last_audit_check()
         bot.loop.create_task(_audit_log_poller(bot))
         bot.loop.create_task(_weekly_report_scheduler(bot))
         bot.loop.create_task(_retention_checker(bot))
@@ -277,6 +296,16 @@ def setup_events(bot: discord.Client) -> None:
             if target_id is None:
                 continue
 
+            # 対象がBotの場合は記録しない
+            target_user = message.guild.get_member(int(target_id))
+            if target_user is None:
+                try:
+                    target_user = await bot.fetch_user(int(target_id))
+                except Exception:
+                    target_user = None
+            if target_user is not None and getattr(target_user, 'bot', False):
+                continue
+
             reason      = embed.description or ""
             executed_at = _now_iso()
             executor    = str(message.author)
@@ -320,6 +349,7 @@ async def _audit_log_poller(bot: discord.Client) -> None:
         try:
             check_after       = _last_audit_check
             _last_audit_check = datetime.now(timezone.utc)
+            _save_last_audit_check(_last_audit_check)
 
             async for entry in guild.audit_logs(limit=100):
                 entry_time = entry.created_at.replace(tzinfo=timezone.utc)
@@ -340,11 +370,10 @@ async def _audit_log_poller(bot: discord.Client) -> None:
                 elif action == discord.AuditLogAction.kick:
                     punishment_type = "KICK"
 
-                # ── Automod タイムアウト ───────────────────
-                elif action == discord.AuditLogAction.automod_timeout:
-                    punishment_type = "TIMEOUT"
-
                 # ── TIMEOUT / TIMEOUT解除 ─────────────────
+                # (discord.pyにはAuditLogAction.automod_timeoutという属性は存在しない。
+                #  Wick等Bot経由のタイムアウトも、Discordネイティブのタイムアウトも、
+                #  すべてmember_updateのtimed_out_until変化として検出できる)
                 elif action == discord.AuditLogAction.member_update:
                     is_timeout        = False
                     is_timeout_remove = False
@@ -386,6 +415,10 @@ async def _audit_log_poller(bot: discord.Client) -> None:
 
                 target = entry.target
                 if target is None:
+                    continue
+
+                # 対象がBotの場合は記録しない
+                if getattr(target, 'bot', False):
                     continue
 
                 target_id   = str(target.id)
