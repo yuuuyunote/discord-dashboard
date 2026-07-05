@@ -98,6 +98,13 @@ def init_db() -> None:
             granted_at  TEXT NOT NULL
         )""", ()),
 
+        # 新規：Bot再起動をまたいで状態を保持するための汎用キーバリュー
+        # （監査ログの最終チェック時刻など）
+        ("""CREATE TABLE IF NOT EXISTS bot_state (
+            key   TEXT PRIMARY KEY,
+            value TEXT NOT NULL
+        )""", ()),
+
         # インデックス
         ("CREATE INDEX IF NOT EXISTS idx_join_user    ON join_logs(user_id)", ()),
         ("CREATE INDEX IF NOT EXISTS idx_join_invite  ON join_logs(invite_code)", ()),
@@ -109,6 +116,23 @@ def init_db() -> None:
         ("CREATE INDEX IF NOT EXISTS idx_ret_user     ON retention_checks(user_id)", ()),
     ]
     _execute_many(stmts)
+
+
+# ─────────────────────────────────────────────────────────
+# bot_state（Bot再起動をまたぐ永続状態）
+# ─────────────────────────────────────────────────────────
+
+def get_setting(key: str) -> Optional[str]:
+    rows = _execute("SELECT value FROM bot_state WHERE key = %s", (key,))
+    return rows[0]["value"] if rows else None
+
+
+def set_setting(key: str, value: str) -> None:
+    _execute(
+        "INSERT INTO bot_state (key, value) VALUES (%s, %s) "
+        "ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value",
+        (key, value),
+    )
 
 
 # ─────────────────────────────────────────────────────────
