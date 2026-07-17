@@ -313,7 +313,7 @@
       });
     });
 
-    // ─── 統計カード自動更新（5分ごと） ───────────────────
+    // ─── 統計カード自動更新（5分ごと、タブが非表示の間は停止） ───
     async function refreshStats() {
       try {
         const res  = await fetch('/api/stats');
@@ -333,7 +333,30 @@
         if (els.total_punishments)   els.total_punishments.textContent   = data.total_punishments;
       } catch(e) {}
     }
-    setInterval(refreshStats, 5 * 60 * 1000); // 5分ごと
+
+    let statsIntervalId = null;
+
+    function startStatsPolling() {
+      if (statsIntervalId !== null) return;
+      refreshStats(); // タブに戻った瞬間に1回即時更新
+      statsIntervalId = setInterval(refreshStats, 5 * 60 * 1000); // 5分ごと
+    }
+
+    function stopStatsPolling() {
+      if (statsIntervalId === null) return;
+      clearInterval(statsIntervalId);
+      statsIntervalId = null;
+    }
+
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) {
+        stopStatsPolling();
+      } else {
+        startStatsPolling();
+      }
+    });
+
+    if (!document.hidden) startStatsPolling();
 
   </script>
 </body>
