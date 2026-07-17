@@ -280,6 +280,42 @@ def add_activity_log(user_id: str, channel_id: str, sent_at: str) -> None:
         (user_id, channel_id, sent_at)
     )
 
+def add_activity_logs_bulk(records: list[tuple[str, str, str]]) -> None:
+    """
+    records: [(user_id, channel_id, sent_at), ...]
+    メッセージ1件ごとにDB書き込みするとNeonのコンピュートが常時起きた状態に
+    なりCU-hoursを消費するため、一定間隔でまとめて書き込むためのバルク版。
+    """
+    if not records:
+        return
+    conn = get_conn()
+    try:
+        with conn.cursor() as cur:
+            psycopg2.extras.execute_values(
+                cur,
+                "INSERT INTO activity_logs (user_id, channel_id, sent_at) VALUES %s",
+                records,
+            )
+            conn.commit()
+    finally:
+        conn.close()
+
+def bulk_increment_invite_messages(counts: dict[str, int]) -> None:
+    """counts: {invite_code: このバッチ内での発言数}"""
+    if not counts:
+        return
+    conn = get_conn()
+    try:
+        with conn.cursor() as cur:
+            for code, cnt in counts.items():
+                cur.execute(
+                    "UPDATE invites SET total_messages = total_messages + %s WHERE code = %s",
+                    (cnt, code),
+                )
+            conn.commit()
+    finally:
+        conn.close()
+
 def get_channel_ranking(limit: int = 10) -> list[dict]:
     return _execute(
         "SELECT channel_id, COUNT(*) AS msg_count FROM activity_logs GROUP BY channel_id ORDER BY msg_count DESC LIMIT %s",
