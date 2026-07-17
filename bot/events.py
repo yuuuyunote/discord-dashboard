@@ -20,9 +20,18 @@ FIRST_MSG_ROLE_ID  = int(os.getenv("FIRST_MSG_ROLE_ID", "0"))
 REPORT_CHANNEL_ID  = int(os.getenv("REPORT_CHANNEL_ID", "0"))
 
 # ポーリング間隔を15秒に短縮
-AUDIT_POLL_INTERVAL = 15
+AUDIT_POLL_INTERVAL = 60
 
 _invite_cache: dict[str, int] = {}
+
+# 発言ごとのDB書き込みをやめてバッチ化するためのバッファ
+# （メッセージ1件ごとに書き込むとNeonのコンピュートが常時起きた状態になりCU-hoursを消費するため）
+_activity_buffer: list[tuple[str, str, str]] = []
+_invite_msg_buffer: dict[str, int] = {}
+ACTIVITY_FLUSH_INTERVAL = 60
+
+# user_id → 招待コード のキャッシュ（on_messageで毎回DBを読みに行かないため）
+_user_invite_cache: dict[str, Optional[str]] = {}
 _last_audit_check: datetime = datetime.now(timezone.utc)
 
 # 招待検出の同時実行制御用ロック（レースコンディション対策）
@@ -122,6 +131,7 @@ def setup_events(bot: discord.Client) -> None:
         bot.loop.create_task(_audit_log_poller(bot))
         bot.loop.create_task(_weekly_report_scheduler(bot))
         bot.loop.create_task(_retention_checker(bot))
+        bot.loop.create_task(_activity_flusher(bot))
         print("[Bot] 全タスク起動完了")
 
     @bot.event
@@ -143,6 +153,7 @@ def setup_events(bot: discord.Client) -> None:
 
         database.add_join_log(str(member.id), used_code, joined_at)
         database.add_retention_check(str(member.id), used_code, joined_at)
+        _user_invite_cache[str(member.id)] = used_code
 
         print(f"[Bot] 入室: {member} | 招待コード: {used_code or '不明'}")
 
@@ -193,15 +204,18 @@ def setup_events(bot: discord.Client) -> None:
 
         user_id = str(message.author.id)
 
-        database.add_activity_log(
-            user_id=user_id,
-            channel_id=str(message.channel.id),
-            sent_at=_now_iso(),
-        )
+        # 直接INSERTせず、一定間隔でまとめて書き込むバッファに積む
+        _activity_buffer.append((user_id, str(message.channel.id), _now_iso()))
 
-        log = database.get_join_log_by_user(user_id)
-        if log and log.get("invite_code"):
-            database.update_invite_activity(log["invite_code"], messages=1, vc_sec=0)
+        if user_id in _user_invite_cache:
+            invite_code = _user_invite_cache[user_id]
+        else:
+            log = database.get_join_log_by_user(user_id)
+            invite_code = log["invite_code"] if log and log.get("invite_code") else None
+            _user_invite_cache[user_id] = invite_code
+
+        if invite_code:
+            _invite_msg_buffer[invite_code] = _invite_msg_buffer.get(invite_code, 0) + 1
 
         # 初回発言ロール自動付与
         if FIRST_MSG_ROLE_ID and not database.has_first_message(user_id):
@@ -333,7 +347,32 @@ def setup_events(bot: discord.Client) -> None:
 
 
 # ─────────────────────────────────────────────────────────
-# 監査ログポーリング（15秒ごと）
+# 発言ログのバッチ書き込み（1分ごと）
+# ─────────────────────────────────────────────────────────
+
+async def _activity_flusher(bot: discord.Client) -> None:
+    global _activity_buffer, _invite_msg_buffer
+
+    while not bot.is_closed():
+        await asyncio.sleep(ACTIVITY_FLUSH_INTERVAL)
+
+        if _activity_buffer:
+            batch, _activity_buffer = _activity_buffer, []
+            try:
+                database.add_activity_logs_bulk(batch)
+            except Exception as e:
+                print(f"[Bot] activity_logsフラッシュエラー: {e}")
+
+        if _invite_msg_buffer:
+            counts, _invite_msg_buffer = _invite_msg_buffer, {}
+            try:
+                database.bulk_increment_invite_messages(counts)
+            except Exception as e:
+                print(f"[Bot] invite集計フラッシュエラー: {e}")
+
+
+# ─────────────────────────────────────────────────────────
+# 監査ログポーリング（60秒ごと）
 # ─────────────────────────────────────────────────────────
 
 async def _audit_log_poller(bot: discord.Client) -> None:
@@ -349,7 +388,7 @@ async def _audit_log_poller(bot: discord.Client) -> None:
         try:
             check_after       = _last_audit_check
             _last_audit_check = datetime.now(timezone.utc)
-            _save_last_audit_check(_last_audit_check)
+            had_activity      = False  # 実際に処罰の記録・削除が起きた場合のみDBへ永続化する
 
             async for entry in guild.audit_logs(limit=100):
                 entry_time = entry.created_at.replace(tzinfo=timezone.utc)
@@ -447,6 +486,7 @@ async def _audit_log_poller(bot: discord.Client) -> None:
                     )
                     if latest_timeout:
                         database.delete_punishment(latest_timeout["id"])
+                        had_activity = True
                         print(f"[Bot] 最新のTIMEOUTを削除: id={latest_timeout['id']} | 対象: {target_name}")
                     # TIMEOUT_REMOVEはDBに記録せず終了
                     continue
@@ -459,6 +499,7 @@ async def _audit_log_poller(bot: discord.Client) -> None:
                     reason=reason,
                     executed_at=executed_at,
                 )
+                had_activity = True
 
                 # 運営メンバーなら実績カウント
                 if entry.user:
@@ -470,6 +511,11 @@ async def _audit_log_poller(bot: discord.Client) -> None:
                     f"[Bot] 処罰検知: {punishment_type} | "
                     f"対象: {target_name} | 実行者: {executor} | 理由: {reason[:30]}"
                 )
+
+            # 実際に何かしら処罰の記録・削除が起きた回だけ、チェック時刻をDBへ永続化する
+            # （毎回書き込むとNeonのコンピュートが常時起きた状態になりCU-hoursを消費するため）
+            if had_activity:
+                _save_last_audit_check(_last_audit_check)
 
         except discord.Forbidden:
             print("[Bot] 警告: 監査ログの読み取り権限がありません")
