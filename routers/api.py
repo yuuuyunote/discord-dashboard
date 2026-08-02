@@ -4,6 +4,7 @@ routers/api.py
 追加：ノート複数追記・削除、入室数グラフ、招待別ユーザー一覧、定着率レポート
 """
 
+import asyncio
 import csv
 import io
 import json
@@ -25,12 +26,37 @@ router = APIRouter()
 
 GUILD_ID    = int(os.getenv("GUILD_ID", "0"))
 MOD_ROLE_ID = int(os.getenv("MOD_ROLE_ID", "0"))
+ADMIN_ROLE_ID = int(os.getenv("ADMIN_ROLE_ID", "0"))
 
 
 def _check_auth(request: Request):
     session = get_session(request)
     if not session:
         return RedirectResponse("/login")
+    return session
+
+
+def _has_admin_role(user_id: str) -> bool:
+    """運営ロール(MOD_ROLE_ID)より人数・権限を絞った管理者ロール(ADMIN_ROLE_ID)を持つか"""
+    if bot is None or not ADMIN_ROLE_ID:
+        return False
+    guild = bot.get_guild(GUILD_ID)
+    if guild is None:
+        return False
+    member = guild.get_member(int(user_id))
+    if member is None:
+        return False
+    return any(r.id == ADMIN_ROLE_ID for r in member.roles)
+
+
+def _check_admin(request: Request):
+    """通常のログインチェックに加え、管理者ロール保持者のみを許可する"""
+    result = _check_auth(request)
+    if isinstance(result, RedirectResponse):
+        return result
+    session = result
+    if not _has_admin_role(session.get("user_id", "")):
+        return RedirectResponse("/error/403")
     return session
 
 
@@ -502,3 +528,88 @@ async def api_stats(request: Request):
     stats = database.get_dashboard_stats()
     stats["server_member_count"] = _get_guild_member_count()
     return JSONResponse(stats)
+
+
+# ─── 一斉DM送信（本人限定・メニューには出さない） ──────────
+
+@router.get("/admin/bulk-dm", include_in_schema=False)
+async def bulk_dm_page(request: Request):
+    result = _check_admin(request)
+    if isinstance(result, RedirectResponse):
+        return result
+    session = result
+
+    return templates.TemplateResponse("bulk_dm.html", {
+        "request": request,
+        "session": session,
+    })
+
+
+@router.post("/api/bulk-dm/send", include_in_schema=False)
+async def bulk_dm_send(
+    request: Request,
+    recipients: str = Form(...),
+    message: str = Form(...),
+):
+    result = _check_admin(request)
+    if isinstance(result, RedirectResponse):
+        return JSONResponse({"ok": False, "error": "forbidden"}, status_code=403)
+
+    if bot is None:
+        return JSONResponse({"ok": False, "error": "bot_not_ready"}, status_code=503)
+
+    ids: list[str] = []
+    for line in recipients.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.isdigit():
+            ids.append(line)
+
+    seen: set[str] = set()
+    unique_ids: list[str] = []
+    for uid in ids:
+        if uid not in seen:
+            seen.add(uid)
+            unique_ids.append(uid)
+
+    message = message.strip()
+    if not unique_ids or not message:
+        return JSONResponse({"ok": False, "error": "empty"}, status_code=400)
+
+    results = []
+    for i, uid in enumerate(unique_ids):
+        try:
+            user = await bot.fetch_user(int(uid))
+            dm   = await user.create_dm()
+            await dm.send(message)
+            results.append({"user_id": uid, "name": str(user), "ok": True, "reason": ""})
+        except discord.NotFound:
+            results.append({"user_id": uid, "name": "", "ok": False, "reason": "ユーザーが見つかりません"})
+        except discord.Forbidden:
+            results.append({"user_id": uid, "name": "", "ok": False, "reason": "DMを送れません（拒否設定等）"})
+        except Exception as e:
+            results.append({"user_id": uid, "name": "", "ok": False, "reason": str(e)})
+
+        # レート制限・スパム判定対策
+        if i < len(unique_ids) - 1:
+            await asyncio.sleep(1.2)
+
+    success_count = sum(1 for r in results if r["ok"])
+    return JSONResponse({
+        "ok": True,
+        "success_count": success_count,
+        "failed_count": len(results) - success_count,
+        "results": results,
+    })
+
+
+@router.get("/api/dm-replies", include_in_schema=False)
+async def api_dm_replies(request: Request):
+    """一斉DMへの返信一覧をJSONで返す"""
+    result = _check_admin(request)
+    if isinstance(result, RedirectResponse):
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
+
+    replies = database.get_dm_replies(limit=100)
+    return JSONResponse({"ok": True, "replies": replies})
