@@ -68,9 +68,13 @@ async def _handle_dm_reply(bot: discord.Client, message: discord.Message) -> Non
     content = message.content.strip() if message.content else "（本文なし・添付ファイルのみ等）"
 
     try:
-        database.add_dm_reply(user_id, str(message.author), content, _now_iso())
+        inserted = database.add_dm_reply(user_id, str(message.author), content, _now_iso(), message_id=str(message.id))
     except Exception as e:
         print(f"[Bot] DM返信の保存エラー: {e}")
+        return
+
+    if not inserted:
+        # 同じメッセージが既に保存済み（デプロイ切替時の重複イベント等）。通知も出さない
         return
 
     print(f"[Bot] DM返信受信: {message.author} ({user_id}) | {content[:50]}")
