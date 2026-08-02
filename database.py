@@ -111,8 +111,13 @@ def init_db() -> None:
             user_id     TEXT NOT NULL,
             username    TEXT NOT NULL,
             content     TEXT NOT NULL,
-            received_at TEXT NOT NULL
+            received_at TEXT NOT NULL,
+            message_id  TEXT
         )""", ()),
+        # 既存テーブルに対するマイグレーション（初回追加時はNO-OP）
+        ("ALTER TABLE dm_replies ADD COLUMN IF NOT EXISTS message_id TEXT", ()),
+        # 同じDiscordメッセージが二重保存されるのを防ぐ（デプロイ切替時の重複イベント対策）
+        ("CREATE UNIQUE INDEX IF NOT EXISTS idx_dmreply_msgid ON dm_replies(message_id)", ()),
 
         # インデックス
         ("CREATE INDEX IF NOT EXISTS idx_join_user    ON join_logs(user_id)", ()),
@@ -149,11 +154,16 @@ def set_setting(key: str, value: str) -> None:
 # dm_replies（一斉DMへの返信）
 # ─────────────────────────────────────────────────────────
 
-def add_dm_reply(user_id: str, username: str, content: str, received_at: str) -> None:
-    _execute(
-        "INSERT INTO dm_replies (user_id, username, content, received_at) VALUES (%s,%s,%s,%s)",
-        (user_id, username, content, received_at),
+def add_dm_reply(user_id: str, username: str, content: str, received_at: str, message_id: str = None) -> bool:
+    """戻り値: 実際に新規保存されたらTrue、重複でスキップされたらFalse"""
+    rows = _execute(
+        "INSERT INTO dm_replies (user_id, username, content, received_at, message_id) "
+        "VALUES (%s,%s,%s,%s,%s) "
+        "ON CONFLICT (message_id) DO NOTHING "
+        "RETURNING id",
+        (user_id, username, content, received_at, message_id),
     )
+    return bool(rows)
 
 
 def get_dm_replies(limit: int = 100) -> list[dict]:
