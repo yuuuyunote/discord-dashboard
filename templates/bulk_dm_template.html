@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="ja" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>一斉DM送信 — Dashboard</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+</head>
+<body>
+  <nav class="nav-top">
+    <span class="nav-top-logo"><i class="fa-solid fa-terminal"></i> Guide Base + / Dashboard</span>
+    <label class="theme-toggle" title="テーマ切替">
+      <input type="checkbox" id="themeChk">
+      <span class="theme-toggle-track"></span>
+      <span class="theme-toggle-thumb"><span id="themeIcon">☀️</span></span>
+    </label>
+    <div class="nav-top-user">
+      {% if session.avatar %}
+      <div class="nav-top-avatar">
+        <img src="https://cdn.discordapp.com/avatars/{{ session.user_id }}/{{ session.avatar }}.png" alt="">
+      </div>
+      {% endif %}
+      {{ session.username }}
+      <a href="/logout" style="color:var(--text-sub); font-size:12px; margin-left:8px;"><i class="fa-solid fa-right-from-bracket"></i></a>
+    </div>
+  </nav>
+  <div class="dash-layout">
+    <aside class="sidebar">
+      <div class="sidebar-label">Navigation</div>
+      <nav class="sidebar-nav">
+        <a href="/dashboard"><i class="fa-solid fa-chart-line"></i> ダッシュボード</a>
+        <a href="/search"><i class="fa-solid fa-magnifying-glass"></i> ユーザー検索</a>
+        <a href="/analytics"><i class="fa-solid fa-chart-bar"></i> 分析</a>
+        <a href="/punishments"><i class="fa-solid fa-gavel"></i> 処罰履歴</a>
+        <a href="/retention"><i class="fa-solid fa-chart-pie"></i> 定着率</a>
+      </nav>
+      <hr class="sidebar-divider">
+      <div class="sidebar-label">Export</div>
+      <nav class="sidebar-nav">
+        <a href="/api/csv/users" target="_blank"><i class="fa-solid fa-file-csv"></i> ユーザーCSV</a>
+        <a href="/api/csv/punishments" target="_blank"><i class="fa-solid fa-file-csv"></i> 処罰履歴CSV</a>
+        <a href="/api/csv/invites" target="_blank"><i class="fa-solid fa-file-csv"></i> 招待リンクCSV</a>
+      </nav>
+    </aside>
+    <main class="main-content">
+      <div class="page-header fade-up">
+        <div class="page-header-label">Staff Only</div>
+        <h1>一斉DM送信</h1>
+        <p>指定したユーザーIDへ、同じ文面のDMをまとめて送信します</p>
+      </div>
+
+      <div class="card fade-up card-inner">
+        <div class="section-head"><h2>宛先ユーザーID</h2><span class="mono">1行に1件</span></div>
+        <textarea id="recipientsInput" class="note-textarea" style="min-height:140px;" placeholder="123456789012345678&#10;234567890123456789&#10;（# で始まる行はコメントとして無視されます）"></textarea>
+
+        <div class="section-head" style="margin-top:24px;"><h2>本文</h2></div>
+        <textarea id="messageInput" class="warn-textarea" style="min-height:200px;" placeholder="こんにちは、Guide Base +運営のゆううゆです。&#10;運営募集にご応募いただきありがとうございます。&#10;..."></textarea>
+
+        <div style="display:flex; align-items:center; gap:12px; margin-top:18px;">
+          <button id="sendBtn" class="btn btn-primary"><i class="fa-solid fa-paper-plane"></i> 送信する</button>
+          <span id="recipientCount" class="mono" style="font-size:12px; color:var(--text-sub);"></span>
+        </div>
+        <p style="font-size:11px; color:var(--text-faint); margin-top:10px;">
+          レート制限対策のため、1件ごとに約1.2秒の間隔を空けて送信します。件数が多いと完了まで時間がかかります。
+        </p>
+      </div>
+
+      <div class="card fade-up" id="resultsCard" style="display:none; margin-top:16px;">
+        <div class="card-inner">
+          <div class="section-head"><h2>送信結果</h2><span id="resultSummary" class="mono"></span></div>
+          <div style="overflow-x:auto;">
+            <table class="data-table">
+              <thead>
+                <tr><th>ユーザーID</th><th>名前</th><th>結果</th><th>詳細</th></tr>
+              </thead>
+              <tbody id="resultsBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div class="card fade-up" style="margin-top:16px;">
+        <div class="card-inner">
+          <div class="section-head">
+            <h2>受信したメッセージ</h2>
+            <button id="refreshRepliesBtn" class="btn btn-outline" style="padding:5px 12px; font-size:12px;">
+              <i class="fa-solid fa-rotate"></i> 更新
+            </button>
+          </div>
+          <p style="font-size:12px; color:var(--text-sub); margin-bottom:14px;">
+            送信したDMに対して相手から返信があると、ここに表示されます（新しい順）。
+          </p>
+          <div style="overflow-x:auto;">
+            <table class="data-table">
+              <thead>
+                <tr><th>受信日時</th><th>ユーザーID</th><th>名前</th><th>内容</th></tr>
+              </thead>
+              <tbody id="repliesBody">
+                <tr><td colspan="4" style="color:var(--text-faint); text-align:center;">読み込み中...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+    </main>
+  </div>
+  <div id="toast" class="toast"></div>
+
+  <script>
+    // テーマ
+    const chk  = document.getElementById('themeChk');
+    const icon = document.getElementById('themeIcon');
+    const saved = localStorage.getItem('theme') || 'dark';
+    document.documentElement.setAttribute('data-theme', saved);
+    chk.checked = saved === 'light';
+    icon.textContent = saved === 'light' ? '🌙' : '☀️';
+    chk.addEventListener('change', () => {
+      const t = chk.checked ? 'light' : 'dark';
+      document.documentElement.setAttribute('data-theme', t);
+      localStorage.setItem('theme', t);
+      icon.textContent = t === 'light' ? '🌙' : '☀️';
+    });
+
+    function showToast(msg, ok = true) {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.style.background = ok ? 'var(--accent)' : 'var(--danger)';
+      t.classList.add('show');
+      setTimeout(() => t.classList.remove('show'), 2500);
+    }
+
+    function parseRecipients() {
+      const raw = document.getElementById('recipientsInput').value;
+      const ids = [];
+      raw.split('\n').forEach(line => {
+        line = line.trim();
+        if (!line || line.startsWith('#')) return;
+        if (/^\d+$/.test(line)) ids.push(line);
+      });
+      return [...new Set(ids)];
+    }
+
+    const recipientsInput = document.getElementById('recipientsInput');
+    const recipientCountEl = document.getElementById('recipientCount');
+    function updateCount() {
+      const n = parseRecipients().length;
+      recipientCountEl.textContent = n > 0 ? `宛先 ${n} 件` : '';
+    }
+    recipientsInput.addEventListener('input', updateCount);
+    updateCount();
+
+    document.getElementById('sendBtn').addEventListener('click', async () => {
+      const ids = parseRecipients();
+      const message = document.getElementById('messageInput').value.trim();
+
+      if (ids.length === 0) { showToast('宛先が0件です', false); return; }
+      if (!message) { showToast('本文が空です', false); return; }
+
+      const ok = confirm(`${ids.length} 件へ送信します。よろしいですか？\n\n（送信するとキャンセルできません）`);
+      if (!ok) return;
+
+      const btn = document.getElementById('sendBtn');
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> 送信中...';
+
+      try {
+        const fd = new FormData();
+        fd.append('recipients', ids.join('\n'));
+        fd.append('message', message);
+
+        const res = await fetch('/api/bulk-dm/send', { method: 'POST', body: fd });
+        const data = await res.json();
+
+        if (!data.ok) {
+          showToast('送信に失敗しました: ' + (data.error || ''), false);
+          return;
+        }
+
+        showToast(`送信完了: 成功 ${data.success_count} / 失敗 ${data.failed_count}`, data.failed_count === 0);
+
+        const resultsCard = document.getElementById('resultsCard');
+        const body = document.getElementById('resultsBody');
+        body.innerHTML = '';
+        data.results.forEach(r => {
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td class="mono">${r.user_id}</td>
+            <td>${r.name || '—'}</td>
+            <td>${r.ok ? '<span class="badge badge-green">成功</span>' : '<span class="badge badge-red">失敗</span>'}</td>
+            <td style="color:var(--text-sub); font-size:12px;">${r.reason || '—'}</td>
+          `;
+          body.appendChild(tr);
+        });
+        document.getElementById('resultSummary').textContent = `成功 ${data.success_count} / 失敗 ${data.failed_count}`;
+        resultsCard.style.display = 'block';
+
+      } catch (e) {
+        showToast('通信エラー', false);
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-paper-plane"></i> 送信する';
+      }
+    });
+
+    // ─── 受信したメッセージ ───────────────────────────────
+    function formatJst(isoStr) {
+      try {
+        const d = new Date(isoStr);
+        return d.toLocaleString('ja-JP', {
+          timeZone: 'Asia/Tokyo',
+          year: 'numeric', month: '2-digit', day: '2-digit',
+          hour: '2-digit', minute: '2-digit',
+        }).replace(/\//g, '/');
+      } catch (e) {
+        return isoStr;
+      }
+    }
+
+    function escapeHtml(s) {
+      const div = document.createElement('div');
+      div.textContent = s;
+      return div.innerHTML;
+    }
+
+    async function loadReplies() {
+      const body = document.getElementById('repliesBody');
+      try {
+        const res = await fetch('/api/dm-replies');
+        const data = await res.json();
+        if (!data.ok) {
+          body.innerHTML = '<tr><td colspan="4" style="color:var(--danger); text-align:center;">読み込みに失敗しました</td></tr>';
+          return;
+        }
+        if (data.replies.length === 0) {
+          body.innerHTML = '<tr><td colspan="4" style="color:var(--text-faint); text-align:center;">まだ返信はありません</td></tr>';
+          return;
+        }
+        body.innerHTML = '';
+        data.replies.forEach(r => {
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td class="mono" style="white-space:nowrap;">${formatJst(r.received_at)}</td>
+            <td class="mono">${r.user_id}</td>
+            <td>${escapeHtml(r.username)}</td>
+            <td style="max-width:420px; white-space:pre-wrap;">${escapeHtml(r.content)}</td>
+          `;
+          body.appendChild(tr);
+        });
+      } catch (e) {
+        body.innerHTML = '<tr><td colspan="4" style="color:var(--danger); text-align:center;">通信エラー</td></tr>';
+      }
+    }
+
+    document.getElementById('refreshRepliesBtn').addEventListener('click', loadReplies);
+    loadReplies();
+  </script>
+</body>
+</html>
