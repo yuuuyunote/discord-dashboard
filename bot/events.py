@@ -18,6 +18,7 @@ GUILD_ID           = int(os.getenv("GUILD_ID", "0"))
 MOD_ROLE_ID        = int(os.getenv("MOD_ROLE_ID", "0"))
 FIRST_MSG_ROLE_ID  = int(os.getenv("FIRST_MSG_ROLE_ID", "0"))
 REPORT_CHANNEL_ID  = int(os.getenv("REPORT_CHANNEL_ID", "0"))
+DM_REPLY_CHANNEL_ID = int(os.getenv("DM_REPLY_CHANNEL_ID", "0"))
 
 # ポーリング間隔を15秒に短縮
 AUDIT_POLL_INTERVAL = 60
@@ -59,6 +60,44 @@ def _load_last_audit_check() -> datetime:
 
 def _save_last_audit_check(dt: datetime) -> None:
     database.set_setting("last_audit_check", dt.isoformat())
+
+
+async def _handle_dm_reply(bot: discord.Client, message: discord.Message) -> None:
+    """一斉DMなどへの返信をDBに保存し、指定チャンネルに通知する"""
+    user_id = str(message.author.id)
+    content = message.content.strip() if message.content else "（本文なし・添付ファイルのみ等）"
+
+    try:
+        database.add_dm_reply(user_id, str(message.author), content, _now_iso())
+    except Exception as e:
+        print(f"[Bot] DM返信の保存エラー: {e}")
+        return
+
+    print(f"[Bot] DM返信受信: {message.author} ({user_id}) | {content[:50]}")
+
+    if not DM_REPLY_CHANNEL_ID:
+        return
+
+    channel = bot.get_channel(DM_REPLY_CHANNEL_ID)
+    if channel is None:
+        return
+
+    try:
+        embed = discord.Embed(
+            title="📩 メッセージが届きました",
+            description=content[:500],
+            color=0xE8A13E,
+            timestamp=datetime.now(timezone.utc),
+        )
+        embed.set_footer(text=f"User ID: {user_id}")
+        icon_url = message.author.display_avatar.url if message.author.display_avatar else None
+        if icon_url:
+            embed.set_author(name=str(message.author), icon_url=icon_url)
+        else:
+            embed.set_author(name=str(message.author))
+        await channel.send(embed=embed)
+    except Exception as e:
+        print(f"[Bot] DM返信通知の送信エラー: {e}")
 
 
 async def _fetch_invite_cache(guild: discord.Guild) -> dict[str, int]:
@@ -192,8 +231,12 @@ def setup_events(bot: discord.Client) -> None:
     async def on_message(message: discord.Message) -> None:
         if message.author.bot:
             return
+
+        # DM（サーバーに紐付かないメッセージ）は一斉DMへの返信として扱う
         if not isinstance(message.guild, discord.Guild):
+            await _handle_dm_reply(bot, message)
             return
+
         if message.guild.id != GUILD_ID:
             return
 
