@@ -105,6 +105,15 @@ def init_db() -> None:
             value TEXT NOT NULL
         )""", ()),
 
+        # 新規：一斉DMへの返信を保存する
+        ("""CREATE TABLE IF NOT EXISTS dm_replies (
+            id          SERIAL PRIMARY KEY,
+            user_id     TEXT NOT NULL,
+            username    TEXT NOT NULL,
+            content     TEXT NOT NULL,
+            received_at TEXT NOT NULL
+        )""", ()),
+
         # インデックス
         ("CREATE INDEX IF NOT EXISTS idx_join_user    ON join_logs(user_id)", ()),
         ("CREATE INDEX IF NOT EXISTS idx_join_invite  ON join_logs(invite_code)", ()),
@@ -114,6 +123,7 @@ def init_db() -> None:
         ("CREATE INDEX IF NOT EXISTS idx_pun_user     ON punishments(user_id)", ()),
         ("CREATE INDEX IF NOT EXISTS idx_notes_user   ON user_notes(user_id)", ()),
         ("CREATE INDEX IF NOT EXISTS idx_ret_user     ON retention_checks(user_id)", ()),
+        ("CREATE INDEX IF NOT EXISTS idx_dmreply_user ON dm_replies(user_id)", ()),
     ]
     _execute_many(stmts)
 
@@ -132,6 +142,25 @@ def set_setting(key: str, value: str) -> None:
         "INSERT INTO bot_state (key, value) VALUES (%s, %s) "
         "ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value",
         (key, value),
+    )
+
+
+# ─────────────────────────────────────────────────────────
+# dm_replies（一斉DMへの返信）
+# ─────────────────────────────────────────────────────────
+
+def add_dm_reply(user_id: str, username: str, content: str, received_at: str) -> None:
+    _execute(
+        "INSERT INTO dm_replies (user_id, username, content, received_at) VALUES (%s,%s,%s,%s)",
+        (user_id, username, content, received_at),
+    )
+
+
+def get_dm_replies(limit: int = 100) -> list[dict]:
+    return _execute(
+        "SELECT id, user_id, username, content, received_at "
+        "FROM dm_replies ORDER BY received_at DESC LIMIT %s",
+        (limit,),
     )
 
 
