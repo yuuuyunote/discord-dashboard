@@ -105,19 +105,24 @@ def init_db() -> None:
             value TEXT NOT NULL
         )""", ()),
 
-        # 新規：一斉DMへの返信を保存する
-        ("""CREATE TABLE IF NOT EXISTS dm_replies (
-            id          SERIAL PRIMARY KEY,
-            user_id     TEXT NOT NULL,
-            username    TEXT NOT NULL,
-            content     TEXT NOT NULL,
-            received_at TEXT NOT NULL,
-            message_id  TEXT
+        # 新規：個別チャット形式でのDM対応管理
+        # （dm_repliesは片方向専用だったため、双方向のスレッド管理に置き換え）
+        ("""CREATE TABLE IF NOT EXISTS dm_threads (
+            user_id         TEXT PRIMARY KEY,
+            username        TEXT NOT NULL,
+            status          TEXT NOT NULL DEFAULT 'unhandled',
+            last_message_at TEXT NOT NULL
         )""", ()),
-        # 既存テーブルに対するマイグレーション（初回追加時はNO-OP）
-        ("ALTER TABLE dm_replies ADD COLUMN IF NOT EXISTS message_id TEXT", ()),
-        # 同じDiscordメッセージが二重保存されるのを防ぐ（デプロイ切替時の重複イベント対策）
-        ("CREATE UNIQUE INDEX IF NOT EXISTS idx_dmreply_msgid ON dm_replies(message_id)", ()),
+        ("""CREATE TABLE IF NOT EXISTS dm_messages (
+            id         SERIAL PRIMARY KEY,
+            user_id    TEXT NOT NULL,
+            direction  TEXT NOT NULL,
+            content    TEXT NOT NULL,
+            sent_at    TEXT NOT NULL,
+            message_id TEXT
+        )""", ()),
+        ("CREATE UNIQUE INDEX IF NOT EXISTS idx_dmmsg_msgid ON dm_messages(message_id)", ()),
+        ("CREATE INDEX IF NOT EXISTS idx_dmmsg_user ON dm_messages(user_id)", ()),
 
         # インデックス
         ("CREATE INDEX IF NOT EXISTS idx_join_user    ON join_logs(user_id)", ()),
@@ -128,7 +133,6 @@ def init_db() -> None:
         ("CREATE INDEX IF NOT EXISTS idx_pun_user     ON punishments(user_id)", ()),
         ("CREATE INDEX IF NOT EXISTS idx_notes_user   ON user_notes(user_id)", ()),
         ("CREATE INDEX IF NOT EXISTS idx_ret_user     ON retention_checks(user_id)", ()),
-        ("CREATE INDEX IF NOT EXISTS idx_dmreply_user ON dm_replies(user_id)", ()),
     ]
     _execute_many(stmts)
 
@@ -151,26 +155,73 @@ def set_setting(key: str, value: str) -> None:
 
 
 # ─────────────────────────────────────────────────────────
-# dm_replies（一斉DMへの返信）
+# dm_threads / dm_messages（個別DM対応のチャットスレッド）
 # ─────────────────────────────────────────────────────────
 
-def add_dm_reply(user_id: str, username: str, content: str, received_at: str, message_id: str = None) -> bool:
-    """戻り値: 実際に新規保存されたらTrue、重複でスキップされたらFalse"""
+def upsert_dm_thread(user_id: str, username: str, last_message_at: str, status: Optional[str] = None) -> None:
+    """
+    スレッドを作成、または最終メッセージ日時・ユーザー名を更新する。
+    status を指定した場合のみ対応状況も上書きする（省略時は既存の状態を維持）。
+    """
+    if status is None:
+        _execute(
+            "INSERT INTO dm_threads (user_id, username, status, last_message_at) "
+            "VALUES (%s,%s,'unhandled',%s) "
+            "ON CONFLICT (user_id) DO UPDATE SET "
+            "username = EXCLUDED.username, last_message_at = EXCLUDED.last_message_at",
+            (user_id, username, last_message_at),
+        )
+    else:
+        _execute(
+            "INSERT INTO dm_threads (user_id, username, status, last_message_at) "
+            "VALUES (%s,%s,%s,%s) "
+            "ON CONFLICT (user_id) DO UPDATE SET "
+            "username = EXCLUDED.username, status = EXCLUDED.status, last_message_at = EXCLUDED.last_message_at",
+            (user_id, username, status, last_message_at),
+        )
+
+
+def set_dm_thread_status(user_id: str, status: str) -> None:
+    _execute("UPDATE dm_threads SET status = %s WHERE user_id = %s", (status, user_id))
+
+
+def get_dm_threads() -> list[dict]:
+    return _execute(
+        "SELECT user_id, username, status, last_message_at "
+        "FROM dm_threads ORDER BY last_message_at DESC"
+    )
+
+
+def get_dm_thread(user_id: str) -> Optional[dict]:
     rows = _execute(
-        "INSERT INTO dm_replies (user_id, username, content, received_at, message_id) "
+        "SELECT user_id, username, status, last_message_at FROM dm_threads WHERE user_id = %s",
+        (user_id,),
+    )
+    return rows[0] if rows else None
+
+
+def add_dm_message(
+    user_id: str, direction: str, content: str, sent_at: str, message_id: Optional[str] = None
+) -> bool:
+    """
+    direction: 'in'（相手から） / 'out'（こちらから）
+    戻り値: 実際に新規保存されたらTrue、同じmessage_idで重複ならFalse
+    """
+    rows = _execute(
+        "INSERT INTO dm_messages (user_id, direction, content, sent_at, message_id) "
         "VALUES (%s,%s,%s,%s,%s) "
         "ON CONFLICT (message_id) DO NOTHING "
         "RETURNING id",
-        (user_id, username, content, received_at, message_id),
+        (user_id, direction, content, sent_at, message_id),
     )
     return bool(rows)
 
 
-def get_dm_replies(limit: int = 100) -> list[dict]:
+def get_dm_messages(user_id: str, limit: int = 300) -> list[dict]:
     return _execute(
-        "SELECT id, user_id, username, content, received_at "
-        "FROM dm_replies ORDER BY received_at DESC LIMIT %s",
-        (limit,),
+        "SELECT direction, content, sent_at FROM dm_messages "
+        "WHERE user_id = %s ORDER BY sent_at ASC LIMIT %s",
+        (user_id, limit),
     )
 
 
