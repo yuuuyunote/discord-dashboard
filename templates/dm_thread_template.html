@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="ja" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ username }} とのやりとり — Dashboard</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+</head>
+<body>
+  <nav class="nav-top">
+    <span class="nav-top-logo"><i class="fa-solid fa-terminal"></i> Guide Base + / Dashboard</span>
+    <label class="theme-toggle" title="テーマ切替">
+      <input type="checkbox" id="themeChk">
+      <span class="theme-toggle-track"></span>
+      <span class="theme-toggle-thumb"><span id="themeIcon">☀️</span></span>
+    </label>
+    <div class="nav-top-user">
+      {% if session.avatar %}
+      <div class="nav-top-avatar">
+        <img src="https://cdn.discordapp.com/avatars/{{ session.user_id }}/{{ session.avatar }}.png" alt="">
+      </div>
+      {% endif %}
+      {{ session.username }}
+      <a href="/logout" style="color:var(--text-sub); font-size:12px; margin-left:8px;"><i class="fa-solid fa-right-from-bracket"></i></a>
+    </div>
+  </nav>
+  <div class="dash-layout">
+    <aside class="sidebar">
+      <div class="sidebar-label">Navigation</div>
+      <nav class="sidebar-nav">
+        <a href="/dashboard"><i class="fa-solid fa-chart-line"></i> ダッシュボード</a>
+        <a href="/search"><i class="fa-solid fa-magnifying-glass"></i> ユーザー検索</a>
+        <a href="/analytics"><i class="fa-solid fa-chart-bar"></i> 分析</a>
+        <a href="/punishments"><i class="fa-solid fa-gavel"></i> 処罰履歴</a>
+        <a href="/retention"><i class="fa-solid fa-chart-pie"></i> 定着率</a>
+      </nav>
+      <hr class="sidebar-divider">
+      <div class="sidebar-label">Export</div>
+      <nav class="sidebar-nav">
+        <a href="/api/csv/users" target="_blank"><i class="fa-solid fa-file-csv"></i> ユーザーCSV</a>
+        <a href="/api/csv/punishments" target="_blank"><i class="fa-solid fa-file-csv"></i> 処罰履歴CSV</a>
+        <a href="/api/csv/invites" target="_blank"><i class="fa-solid fa-file-csv"></i> 招待リンクCSV</a>
+      </nav>
+    </aside>
+    <main class="main-content">
+      <div class="page-header fade-up">
+        <div class="page-header-label"><a href="/admin/bulk-dm" style="color:var(--accent);"><i class="fa-solid fa-arrow-left"></i> 個別対応</a></div>
+        <h1>{{ username }}</h1>
+        <p class="mono">{{ user_id }}</p>
+      </div>
+
+      <div class="card fade-up">
+        <div class="chat-header">
+          <div class="chat-avatar">
+            {% if avatar_url %}<img src="{{ avatar_url }}" alt="">{% endif %}
+          </div>
+          <div class="chat-header-info">
+            <h2>{{ username }}</h2>
+            <div class="chat-uid">{{ user_id }}</div>
+          </div>
+          <button id="statusBtn" class="btn btn-outline">
+            <i class="fa-solid fa-rotate-left"></i> <span id="statusBtnLabel">読み込み中...</span>
+          </button>
+        </div>
+
+        <div class="chat-messages" id="chatMessages">
+          <p style="color:var(--text-faint); text-align:center;">読み込み中...</p>
+        </div>
+
+        <div class="chat-input-row">
+          <textarea id="chatInput" placeholder="メッセージを入力..." rows="1"></textarea>
+          <button id="chatSendBtn" class="btn btn-primary"><i class="fa-solid fa-paper-plane"></i></button>
+        </div>
+      </div>
+
+    </main>
+  </div>
+
+  <div id="toast" class="toast"></div>
+
+  <script>
+    const USER_ID = "{{ user_id }}";
+
+    // テーマ
+    const chk  = document.getElementById('themeChk');
+    const icon = document.getElementById('themeIcon');
+    const saved = localStorage.getItem('theme') || 'dark';
+    document.documentElement.setAttribute('data-theme', saved);
+    chk.checked = saved === 'light';
+    icon.textContent = saved === 'light' ? '🌙' : '☀️';
+    chk.addEventListener('change', () => {
+      const t = chk.checked ? 'light' : 'dark';
+      document.documentElement.setAttribute('data-theme', t);
+      localStorage.setItem('theme', t);
+      icon.textContent = t === 'light' ? '🌙' : '☀️';
+    });
+
+    function showToast(msg, ok = true) {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.style.background = ok ? 'var(--accent)' : 'var(--danger)';
+      t.classList.add('show');
+      setTimeout(() => t.classList.remove('show'), 2500);
+    }
+
+    function escapeHtml(s) {
+      const div = document.createElement('div');
+      div.textContent = s;
+      return div.innerHTML;
+    }
+
+    function formatJst(isoStr) {
+      try {
+        const d = new Date(isoStr);
+        return d.toLocaleString('ja-JP', {
+          timeZone: 'Asia/Tokyo',
+          month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit',
+        });
+      } catch (e) {
+        return isoStr;
+      }
+    }
+
+    let currentStatus = 'unhandled';
+
+    function renderStatusBtn() {
+      const label = document.getElementById('statusBtnLabel');
+      if (currentStatus === 'handled') {
+        label.textContent = '未対応に戻す';
+      } else {
+        label.textContent = '対応済みにする';
+      }
+    }
+
+    async function loadThread() {
+      const box = document.getElementById('chatMessages');
+      try {
+        const res = await fetch(`/api/dm-thread/${USER_ID}`);
+        const data = await res.json();
+        if (!data.ok) {
+          box.innerHTML = '<p style="color:var(--danger); text-align:center;">読み込みに失敗しました</p>';
+          return;
+        }
+
+        currentStatus = data.thread ? data.thread.status : 'unhandled';
+        renderStatusBtn();
+
+        if (data.messages.length === 0) {
+          box.innerHTML = '<p style="color:var(--text-faint); text-align:center;">まだやりとりはありません</p>';
+        } else {
+          box.innerHTML = '';
+          data.messages.forEach(m => {
+            const row = document.createElement('div');
+            row.className = `chat-row ${m.direction}`;
+            row.innerHTML = `
+              <div class="chat-bubble">${escapeHtml(m.content)}</div>
+              <div class="chat-time">${formatJst(m.sent_at)}</div>
+            `;
+            box.appendChild(row);
+          });
+          box.scrollTop = box.scrollHeight;
+        }
+      } catch (e) {
+        box.innerHTML = '<p style="color:var(--danger); text-align:center;">通信エラー</p>';
+      }
+    }
+
+    document.getElementById('statusBtn').addEventListener('click', async () => {
+      const newStatus = currentStatus === 'handled' ? 'unhandled' : 'handled';
+      const fd = new FormData();
+      fd.append('status', newStatus);
+      try {
+        const res = await fetch(`/api/dm-thread/${USER_ID}/status`, { method: 'POST', body: fd });
+        const data = await res.json();
+        if (data.ok) {
+          currentStatus = newStatus;
+          renderStatusBtn();
+          showToast(newStatus === 'handled' ? '対応済みにしました' : '未対応に戻しました');
+        } else {
+          showToast('更新に失敗しました', false);
+        }
+      } catch (e) {
+        showToast('通信エラー', false);
+      }
+    });
+
+    async function sendMessage() {
+      const input = document.getElementById('chatInput');
+      const message = input.value.trim();
+      if (!message) return;
+
+      const btn = document.getElementById('chatSendBtn');
+      btn.disabled = true;
+
+      try {
+        const fd = new FormData();
+        fd.append('message', message);
+        const res = await fetch(`/api/dm-thread/${USER_ID}/send`, { method: 'POST', body: fd });
+        const data = await res.json();
+        if (data.ok) {
+          input.value = '';
+          await loadThread();
+        } else {
+          showToast('送信に失敗しました: ' + (data.error || ''), false);
+        }
+      } catch (e) {
+        showToast('通信エラー', false);
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    document.getElementById('chatSendBtn').addEventListener('click', sendMessage);
+    document.getElementById('chatInput').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendMessage();
+      }
+    });
+
+    loadThread();
+  </script>
+</body>
+</html>
