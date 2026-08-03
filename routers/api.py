@@ -582,8 +582,15 @@ async def bulk_dm_send(
         try:
             user = await bot.fetch_user(int(uid))
             dm   = await user.create_dm()
-            await dm.send(message)
+            sent = await dm.send(message)
             results.append({"user_id": uid, "name": str(user), "ok": True, "reason": ""})
+
+            now = datetime.now(timezone.utc).isoformat()
+            try:
+                database.add_dm_message(uid, "out", message, now, message_id=str(sent.id))
+                database.upsert_dm_thread(uid, str(user), now, status="handled")
+            except Exception as e:
+                print(f"[Dashboard] 一斉DMのスレッド記録エラー: {e}")
         except discord.NotFound:
             results.append({"user_id": uid, "name": "", "ok": False, "reason": "ユーザーが見つかりません"})
         except discord.Forbidden:
@@ -604,12 +611,94 @@ async def bulk_dm_send(
     })
 
 
-@router.get("/api/dm-replies", include_in_schema=False)
-async def api_dm_replies(request: Request):
-    """一斉DMへの返信一覧をJSONで返す"""
+@router.get("/api/dm-threads", include_in_schema=False)
+async def api_dm_threads(request: Request):
+    """個別対応スレッドの一覧をJSONで返す"""
     result = _check_admin(request)
     if isinstance(result, RedirectResponse):
         return JSONResponse({"error": "unauthorized"}, status_code=401)
 
-    replies = database.get_dm_replies(limit=100)
-    return JSONResponse({"ok": True, "replies": replies})
+    threads = database.get_dm_threads()
+    return JSONResponse({"ok": True, "threads": threads})
+
+
+@router.get("/admin/dm-thread", include_in_schema=False)
+async def dm_thread_page(request: Request, user_id: str):
+    """個別チャット画面"""
+    result = _check_admin(request)
+    if isinstance(result, RedirectResponse):
+        return result
+    session = result
+
+    thread_user = None
+    if bot is not None:
+        try:
+            thread_user = await bot.fetch_user(int(user_id))
+        except Exception:
+            thread_user = None
+
+    return templates.TemplateResponse("dm_thread.html", {
+        "request":  request,
+        "session":  session,
+        "user_id":  user_id,
+        "username": str(thread_user) if thread_user else user_id,
+        "avatar_url": thread_user.display_avatar.url if thread_user and thread_user.display_avatar else "",
+    })
+
+
+@router.get("/api/dm-thread/{user_id}", include_in_schema=False)
+async def api_dm_thread_detail(request: Request, user_id: str):
+    """特定ユーザーとのやりとり一覧をJSONで返す"""
+    result = _check_admin(request)
+    if isinstance(result, RedirectResponse):
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
+
+    thread   = database.get_dm_thread(user_id)
+    messages = database.get_dm_messages(user_id)
+    return JSONResponse({"ok": True, "thread": thread, "messages": messages})
+
+
+@router.post("/api/dm-thread/{user_id}/send", include_in_schema=False)
+async def api_dm_thread_send(request: Request, user_id: str, message: str = Form(...)):
+    """個別チャットから1件だけ返信を送る"""
+    result = _check_admin(request)
+    if isinstance(result, RedirectResponse):
+        return JSONResponse({"ok": False, "error": "forbidden"}, status_code=403)
+
+    if bot is None:
+        return JSONResponse({"ok": False, "error": "bot_not_ready"}, status_code=503)
+
+    message = message.strip()
+    if not message:
+        return JSONResponse({"ok": False, "error": "empty"}, status_code=400)
+
+    try:
+        user = await bot.fetch_user(int(user_id))
+        dm   = await user.create_dm()
+        sent = await dm.send(message)
+    except discord.NotFound:
+        return JSONResponse({"ok": False, "error": "ユーザーが見つかりません"}, status_code=404)
+    except discord.Forbidden:
+        return JSONResponse({"ok": False, "error": "DMを送れません（拒否設定等）"}, status_code=400)
+    except Exception as e:
+        return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
+
+    now = datetime.now(timezone.utc).isoformat()
+    database.add_dm_message(user_id, "out", message, now, message_id=str(sent.id))
+    database.upsert_dm_thread(user_id, str(user), now, status="handled")
+
+    return JSONResponse({"ok": True})
+
+
+@router.post("/api/dm-thread/{user_id}/status", include_in_schema=False)
+async def api_dm_thread_status(request: Request, user_id: str, status: str = Form(...)):
+    """対応済み／未対応 の切り替え"""
+    result = _check_admin(request)
+    if isinstance(result, RedirectResponse):
+        return JSONResponse({"ok": False, "error": "forbidden"}, status_code=403)
+
+    if status not in ("handled", "unhandled"):
+        return JSONResponse({"ok": False, "error": "invalid status"}, status_code=400)
+
+    database.set_dm_thread_status(user_id, status)
+    return JSONResponse({"ok": True})
