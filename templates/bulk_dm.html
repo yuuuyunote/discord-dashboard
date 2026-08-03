@@ -83,23 +83,16 @@
       <div class="card fade-up" style="margin-top:16px;">
         <div class="card-inner">
           <div class="section-head">
-            <h2>受信したメッセージ</h2>
-            <button id="refreshRepliesBtn" class="btn btn-outline" style="padding:5px 12px; font-size:12px;">
+            <h2>個別対応</h2>
+            <button id="refreshThreadsBtn" class="btn btn-outline" style="padding:5px 12px; font-size:12px;">
               <i class="fa-solid fa-rotate"></i> 更新
             </button>
           </div>
           <p style="font-size:12px; color:var(--text-sub); margin-bottom:14px;">
-            送信したDMに対して相手から返信があると、ここに表示されます（新しい順）。
+            送信した相手から返信があると、ここに一覧表示されます。クリックするとチャット形式でやりとりできます。
           </p>
-          <div style="overflow-x:auto;">
-            <table class="data-table">
-              <thead>
-                <tr><th>受信日時</th><th>ユーザーID</th><th>名前</th><th>内容</th></tr>
-              </thead>
-              <tbody id="repliesBody">
-                <tr><td colspan="4" style="color:var(--text-faint); text-align:center;">読み込み中...</td></tr>
-              </tbody>
-            </table>
+          <div class="thread-list" id="threadList">
+            <p style="color:var(--text-faint); text-align:center; padding:20px 0;">読み込み中...</p>
           </div>
         </div>
       </div>
@@ -204,7 +197,7 @@
       }
     });
 
-    // ─── 受信したメッセージ ───────────────────────────────
+    // ─── 個別対応スレッド一覧 ───────────────────────────────
     function formatJst(isoStr) {
       try {
         const d = new Date(isoStr);
@@ -212,7 +205,7 @@
           timeZone: 'Asia/Tokyo',
           year: 'numeric', month: '2-digit', day: '2-digit',
           hour: '2-digit', minute: '2-digit',
-        }).replace(/\//g, '/');
+        });
       } catch (e) {
         return isoStr;
       }
@@ -224,37 +217,43 @@
       return div.innerHTML;
     }
 
-    async function loadReplies() {
-      const body = document.getElementById('repliesBody');
+    async function loadThreads() {
+      const list = document.getElementById('threadList');
       try {
-        const res = await fetch('/api/dm-replies');
+        const res = await fetch('/api/dm-threads');
         const data = await res.json();
         if (!data.ok) {
-          body.innerHTML = '<tr><td colspan="4" style="color:var(--danger); text-align:center;">読み込みに失敗しました</td></tr>';
+          list.innerHTML = '<p style="color:var(--danger); text-align:center; padding:20px 0;">読み込みに失敗しました</p>';
           return;
         }
-        if (data.replies.length === 0) {
-          body.innerHTML = '<tr><td colspan="4" style="color:var(--text-faint); text-align:center;">まだ返信はありません</td></tr>';
+        if (data.threads.length === 0) {
+          list.innerHTML = '<p style="color:var(--text-faint); text-align:center; padding:20px 0;">まだやりとりはありません</p>';
           return;
         }
-        body.innerHTML = '';
-        data.replies.forEach(r => {
-          const tr = document.createElement('tr');
-          tr.innerHTML = `
-            <td class="mono" style="white-space:nowrap;">${formatJst(r.received_at)}</td>
-            <td class="mono">${r.user_id}</td>
-            <td>${escapeHtml(r.username)}</td>
-            <td style="max-width:420px; white-space:pre-wrap;">${escapeHtml(r.content)}</td>
+        list.innerHTML = '';
+        data.threads.forEach(t => {
+          const a = document.createElement('a');
+          a.className = 'thread-item';
+          a.href = `/admin/dm-thread?user_id=${t.user_id}`;
+          const badge = t.status === 'handled'
+            ? '<span class="badge badge-gray">対応済み</span>'
+            : '<span class="badge badge-green">未対応</span>';
+          a.innerHTML = `
+            <div class="thread-item-name">
+              ${escapeHtml(t.username)} <span class="uid">${t.user_id}</span>
+            </div>
+            ${badge}
+            <span class="thread-item-time">${formatJst(t.last_message_at)}</span>
           `;
-          body.appendChild(tr);
+          list.appendChild(a);
         });
       } catch (e) {
-        body.innerHTML = '<tr><td colspan="4" style="color:var(--danger); text-align:center;">通信エラー</td></tr>';
+        list.innerHTML = '<p style="color:var(--danger); text-align:center; padding:20px 0;">通信エラー</p>';
       }
     }
 
-    document.getElementById('refreshRepliesBtn').addEventListener('click', loadReplies);
-    loadReplies();
+    document.getElementById('refreshThreadsBtn').addEventListener('click', loadThreads);
+    loadThreads();
   </script>
 </body>
 </html>
