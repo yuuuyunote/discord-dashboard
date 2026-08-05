@@ -63,12 +63,16 @@ def _save_last_audit_check(dt: datetime) -> None:
 
 
 async def _handle_dm_reply(bot: discord.Client, message: discord.Message) -> None:
-    """一斉DMなどへの返信をDBに保存し、指定チャンネルに通知する"""
+    """個別チャットスレッドにDM返信を保存し、指定チャンネルに通知する"""
     user_id = str(message.author.id)
     content = message.content.strip() if message.content else "（本文なし・添付ファイルのみ等）"
+    now = _now_iso()
 
     try:
-        inserted = database.add_dm_reply(user_id, str(message.author), content, _now_iso(), message_id=str(message.id))
+        inserted = database.add_dm_message(user_id, "in", content, now, message_id=str(message.id))
+        if inserted:
+            # 相手から新着があったら「未対応」に戻す（既に対応済みにしていた場合も含む）
+            database.upsert_dm_thread(user_id, str(message.author), now, status="unhandled")
     except Exception as e:
         print(f"[Bot] DM返信の保存エラー: {e}")
         return
