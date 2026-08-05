@@ -31,16 +31,13 @@
     <aside class="sidebar">
       <div class="sidebar-label">Navigation</div>
       <nav class="sidebar-nav">
-        <a href="/dashboard"><i class="fa-solid fa-chart-line"></i> ダッシュボード</a>
-        <a href="/search"><i class="fa-solid fa-magnifying-glass"></i> ユーザー検索</a>
         <a href="/analytics" class="active"><i class="fa-solid fa-chart-bar"></i> 分析</a>
-        <a href="/punishments"><i class="fa-solid fa-gavel"></i> 処罰履歴</a>
         <a href="/retention"><i class="fa-solid fa-chart-pie"></i> 定着率</a>
+        <a href="/punishments"><i class="fa-solid fa-gavel"></i> 処罰履歴</a>
       </nav>
       <hr class="sidebar-divider">
       <div class="sidebar-label">Export</div>
       <nav class="sidebar-nav">
-        <a href="/api/csv/users" target="_blank"><i class="fa-solid fa-file-csv"></i> ユーザーCSV</a>
         <a href="/api/csv/punishments" target="_blank"><i class="fa-solid fa-file-csv"></i> 処罰履歴CSV</a>
         <a href="/api/csv/invites" target="_blank"><i class="fa-solid fa-file-csv"></i> 招待リンクCSV</a>
       </nav>
@@ -50,10 +47,10 @@
       <div class="page-header fade-up">
         <div class="page-header-label">Analytics</div>
         <h1>詳細分析</h1>
-        <p>ヒートマップ・ランキング・新規ユーザー分析</p>
+        <p>新規ユーザー分析・退室理由の内訳</p>
       </div>
 
-      <!-- 新規ユーザー分析パネル（30日） -->
+      <!-- 新規ユーザー分析パネル -->
       <div class="card fade-up" style="margin-bottom:24px;">
         <div class="card-inner">
           <div class="section-head">
@@ -93,120 +90,20 @@
         </div>
       </div>
 
-      <!-- ヒートマップ -->
-      <div class="card fade-up" style="margin-bottom:24px;">
+      <!-- 退室理由 円グラフ -->
+      <div class="card fade-up">
         <div class="card-inner">
-          <div class="section-head">
-            <h2>活動ヒートマップ（JST）</h2>
-            <span class="badge badge-gray">曜日×時間帯</span>
+          <div class="section-head"><h2>退室理由の内訳</h2></div>
+          <div class="donut-wrap">
+            <canvas id="leaveChart"></canvas>
           </div>
-          <div class="heatmap-wrap">
-            <div class="heatmap-grid" id="heatmapGrid"></div>
+          <div style="display:flex; flex-direction:column; gap:6px; margin-top:16px; font-size:12px;">
+            <div style="display:flex; justify-content:space-between;"><span style="color:var(--text-sub);">⚡ 即抜け（24h以内）</span><span>{{ leave_stats.instant }}人</span></div>
+            <div style="display:flex; justify-content:space-between;"><span style="color:var(--text-sub);">📅 短期（1〜7日）</span><span>{{ leave_stats.short }}人</span></div>
+            <div style="display:flex; justify-content:space-between;"><span style="color:var(--text-sub);">📆 長期在籍後</span><span>{{ leave_stats.long }}人</span></div>
+            <div style="display:flex; justify-content:space-between;"><span style="color:var(--text-sub);">🔨 KICK</span><span>{{ leave_stats.kick }}人</span></div>
+            <div style="display:flex; justify-content:space-between;"><span style="color:var(--text-sub);">🚫 BAN</span><span>{{ leave_stats.ban }}人</span></div>
           </div>
-          <div style="display:flex; align-items:center; gap:8px; margin-top:12px; font-size:11px; color:var(--text-sub); font-family:'JetBrains Mono',monospace;">
-            <span>少</span>
-            <div style="display:flex; gap:2px;">
-              <div style="width:14px; height:14px; border-radius:2px; background:var(--border);"></div>
-              <div style="width:14px; height:14px; border-radius:2px; background:rgba(232,161,62,0.2);"></div>
-              <div style="width:14px; height:14px; border-radius:2px; background:rgba(232,161,62,0.45);"></div>
-              <div style="width:14px; height:14px; border-radius:2px; background:rgba(232,161,62,0.7);"></div>
-              <div style="width:14px; height:14px; border-radius:2px; background:rgba(232,161,62,1);"></div>
-            </div>
-            <span>多</span>
-          </div>
-        </div>
-      </div>
-
-      <!-- 発言数ランキング & 退室理由 -->
-      <div class="two-col fade-up">
-        <!-- 発言数ランキング -->
-        <div class="card">
-          <div class="card-inner">
-            <div class="section-head"><h2>発言数ランキング</h2></div>
-            <div class="tab-btns">
-              <button class="tab-btn active" onclick="switchRanking('30d', this)">30日</button>
-              <button class="tab-btn" onclick="switchRanking('all', this)">全期間</button>
-            </div>
-            <div id="ranking-30d" class="rank-bar-wrap">
-              {% if ranking_30d %}
-              {% set max_30 = ranking_30d[0].msg_count %}
-              {% for u in ranking_30d %}
-              <div class="rank-bar-item">
-                <span class="rank-num">{{ loop.index }}</span>
-                <span class="rank-name">{{ u.username or u.user_id }}</span>
-                <div class="rank-track"><div class="rank-fill" style="width:{{ (u.msg_count / max_30 * 100)|round }}%"></div></div>
-                <span class="rank-count">{{ "{:,}".format(u.msg_count) }}件</span>
-              </div>
-              {% endfor %}
-              {% else %}
-              <p style="color:var(--text-sub); font-size:13px;">データなし</p>
-              {% endif %}
-            </div>
-            <div id="ranking-all" class="rank-bar-wrap" style="display:none;">
-              {% if ranking_all %}
-              {% set max_all = ranking_all[0].msg_count %}
-              {% for u in ranking_all %}
-              <div class="rank-bar-item">
-                <span class="rank-num">{{ loop.index }}</span>
-                <span class="rank-name">{{ u.username or u.user_id }}</span>
-                <div class="rank-track"><div class="rank-fill" style="width:{{ (u.msg_count / max_all * 100)|round }}%"></div></div>
-                <span class="rank-count">{{ "{:,}".format(u.msg_count) }}件</span>
-              </div>
-              {% endfor %}
-              {% else %}
-              <p style="color:var(--text-sub); font-size:13px;">データなし</p>
-              {% endif %}
-            </div>
-          </div>
-        </div>
-
-        <!-- 退室理由 円グラフ -->
-        <div class="card">
-          <div class="card-inner">
-            <div class="section-head"><h2>退室理由の内訳</h2></div>
-            <div class="donut-wrap">
-              <canvas id="leaveChart"></canvas>
-            </div>
-            <div style="display:flex; flex-direction:column; gap:6px; margin-top:16px; font-size:12px;">
-              <div style="display:flex; justify-content:space-between;"><span style="color:var(--text-sub);">⚡ 即抜け（24h以内）</span><span>{{ leave_stats.instant }}人</span></div>
-              <div style="display:flex; justify-content:space-between;"><span style="color:var(--text-sub);">📅 短期（1〜7日）</span><span>{{ leave_stats.short }}人</span></div>
-              <div style="display:flex; justify-content:space-between;"><span style="color:var(--text-sub);">📆 長期在籍後</span><span>{{ leave_stats.long }}人</span></div>
-              <div style="display:flex; justify-content:space-between;"><span style="color:var(--text-sub);">🔨 KICK</span><span>{{ leave_stats.kick }}人</span></div>
-              <div style="display:flex; justify-content:space-between;"><span style="color:var(--text-sub);">🚫 BAN</span><span>{{ leave_stats.ban }}人</span></div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- 招待作成者ランキング -->
-      <div class="card fade-up" style="margin-bottom:24px;">
-        <div class="card-inner">
-          <div class="section-head">
-            <h2>招待数ランキング</h2>
-            <span class="badge badge-gray">貢献スコア順</span>
-          </div>
-          {% if creator_ranking %}
-          <div style="overflow-x:auto; -webkit-overflow-scrolling:touch;">
-            <table class="data-table" style="min-width:500px;">
-              <thead>
-                <tr><th>作成者</th><th>リンク数</th><th>招待数</th><th>総発言数</th><th>貢献スコア</th></tr>
-              </thead>
-              <tbody>
-                {% for r in creator_ranking %}
-                <tr>
-                  <td>{{ r.creator_name }}</td>
-                  <td style="text-align:center;">{{ r.invite_count }}</td>
-                  <td style="text-align:center;">{{ r.total_joins or 0 }}</td>
-                  <td style="text-align:center;">{{ "{:,}".format(r.total_messages or 0) }}</td>
-                  <td style="font-family:'JetBrains Mono',monospace; font-size:12px; color:var(--accent);">{{ r.contribution_score or 0 }}pt</td>
-                </tr>
-                {% endfor %}
-              </tbody>
-            </table>
-          </div>
-          {% else %}
-          <p style="color:var(--text-sub); font-size:13px;">データなし</p>
-          {% endif %}
         </div>
       </div>
 
@@ -214,11 +111,9 @@
   </div>
 
   <nav class="dash-mobile-nav">
-    <a href="/dashboard"><i class="fa-solid fa-chart-line"></i>ホーム</a>
-    <a href="/search"><i class="fa-solid fa-magnifying-glass"></i>検索</a>
     <a href="/analytics" class="active"><i class="fa-solid fa-chart-bar"></i>分析</a>
-    <a href="/punishments"><i class="fa-solid fa-gavel"></i>処罰</a>
     <a href="/retention"><i class="fa-solid fa-chart-pie"></i>定着率</a>
+    <a href="/punishments"><i class="fa-solid fa-gavel"></i>処罰</a>
   </nav>
 
   <script>
@@ -235,46 +130,6 @@
       localStorage.setItem('theme', t);
       icon.textContent = t === 'light' ? '🌙' : '☀️';
     });
-
-    // ヒートマップ描画
-    const heatmapData = {{ heatmap | safe }};
-    const days = ['日','月','火','水','木','金','土'];
-    const grid = document.getElementById('heatmapGrid');
-
-    // 最大値取得
-    const maxVal = Math.max(...heatmapData.flat().filter(v => v > 0), 1);
-
-    // ヘッダー行（時間）
-    grid.appendChild(Object.assign(document.createElement('div'), {className: 'heatmap-header'}));
-    for (let h = 0; h < 24; h++) {
-      const el = document.createElement('div');
-      el.className = 'heatmap-header';
-      el.textContent = h % 3 === 0 ? h : '';
-      grid.appendChild(el);
-    }
-
-    // データ行
-    for (let d = 0; d < 7; d++) {
-      const label = document.createElement('div');
-      label.className = 'heatmap-label';
-      label.textContent = days[d];
-      grid.appendChild(label);
-
-      for (let h = 0; h < 24; h++) {
-        const val = heatmapData[d][h];
-        const ratio = val / maxVal;
-        const cell = document.createElement('div');
-        cell.className = 'heatmap-cell';
-        if (val === 0) {
-          cell.style.background = 'var(--border)';
-        } else {
-          const alpha = 0.15 + ratio * 0.85;
-          cell.style.background = `rgba(232,161,62,${alpha.toFixed(2)})`;
-        }
-        cell.title = `${days[d]}曜 ${h}時: ${val}件`;
-        grid.appendChild(cell);
-      }
-    }
 
     // 退室理由 円グラフ
     const leaveCtx = document.getElementById('leaveChart').getContext('2d');
@@ -308,15 +163,6 @@
         }
       }
     });
-
-    // ランキング切り替え
-    function switchRanking(tab, btn) {
-      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      document.getElementById('ranking-30d').style.display = tab === '30d' ? 'flex' : 'none';
-      document.getElementById('ranking-all').style.display = tab === 'all' ? 'flex' : 'none';
-    }
-    document.getElementById('ranking-30d').style.display = 'flex';
   </script>
 </body>
 </html>
