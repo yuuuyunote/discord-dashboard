@@ -104,7 +104,7 @@ async def login_head():
 async def root(request: Request):
     session = get_session(request)
     if session:
-        return RedirectResponse("/dashboard")
+        return RedirectResponse("/analytics")
     return RedirectResponse("/login")
 
 
@@ -112,7 +112,7 @@ async def root(request: Request):
 async def login_page(request: Request):
     session = get_session(request)
     if session:
-        return RedirectResponse("/dashboard")
+        return RedirectResponse("/analytics")
     return templates.TemplateResponse("login.html", {"request": request})
 
 
@@ -195,7 +195,7 @@ async def auth_callback(request: Request, code: str = "", error: str = ""):
         "logged_in": datetime.now(timezone.utc).isoformat(),
     }
 
-    response = RedirectResponse("/dashboard", status_code=302)
+    response = RedirectResponse("/analytics", status_code=302)
     set_session(response, session_payload)
     return response
 
