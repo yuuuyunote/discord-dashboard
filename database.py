@@ -454,56 +454,6 @@ def get_retention_stats_by_invite() -> list[dict]:
     """)
 
 
-# ─────────────────────────────────────────────────────────
-# 週次レポート集計（Discordへの自動送信用）
-# ─────────────────────────────────────────────────────────
-
-def get_weekly_stats() -> dict:
-    """定期レポート用週次統計"""
-    joins = (_execute("""
-        SELECT COUNT(*) AS c FROM join_logs
-        WHERE joined_at >= (NOW() - INTERVAL '7 days')::TEXT
-    """) or [{"c":0}])[0]["c"] or 0
-
-    leaves = (_execute("""
-        SELECT COUNT(*) AS c FROM join_logs
-        WHERE left_at >= (NOW() - INTERVAL '7 days')::TEXT
-        AND left_at IS NOT NULL
-    """) or [{"c":0}])[0]["c"] or 0
-
-    instant = (_execute("""
-        SELECT COUNT(*) AS c FROM join_logs
-        WHERE joined_at >= (NOW() - INTERVAL '7 days')::TEXT
-        AND left_at IS NOT NULL
-        AND (left_at::timestamp - joined_at::timestamp) < INTERVAL '24 hours'
-    """) or [{"c":0}])[0]["c"] or 0
-
-    messages = (_execute("""
-        SELECT COUNT(*) AS c FROM activity_logs
-        WHERE sent_at >= (NOW() - INTERVAL '7 days')::TEXT
-    """) or [{"c":0}])[0]["c"] or 0
-
-    punishments = (_execute("""
-        SELECT COUNT(*) AS c FROM punishments
-        WHERE executed_at >= (NOW() - INTERVAL '7 days')::TEXT
-    """) or [{"c":0}])[0]["c"] or 0
-
-    top_channels = _execute("""
-        SELECT channel_id, COUNT(*) AS cnt
-        FROM activity_logs
-        WHERE sent_at >= (NOW() - INTERVAL '7 days')::TEXT
-        GROUP BY channel_id
-        ORDER BY cnt DESC
-        LIMIT 3
-    """)
-
-    return {
-        "joins": joins, "leaves": leaves, "instant_leaves": instant,
-        "messages": messages, "punishments": punishments,
-        "top_channels": top_channels,
-    }
-
-
 def delete_punishment(punishment_id: int) -> None:
     _execute("DELETE FROM punishments WHERE id=%s", (punishment_id,))
 
