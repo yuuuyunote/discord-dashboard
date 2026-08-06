@@ -504,17 +504,6 @@ def get_weekly_stats() -> dict:
     }
 
 
-# ─────────────────────────────────────────────────────────
-# CSV出力用
-# ─────────────────────────────────────────────────────────
-
-def get_all_punishments_for_csv() -> list[dict]:
-    return _execute("SELECT * FROM punishments ORDER BY executed_at DESC")
-
-def get_all_invites_for_csv() -> list[dict]:
-    return get_all_invites()
-
-
 def delete_punishment(punishment_id: int) -> None:
     _execute("DELETE FROM punishments WHERE id=%s", (punishment_id,))
 
