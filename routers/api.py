@@ -4,15 +4,13 @@ routers/api.py
 招待リンク詳細（即抜け率）、処罰履歴、一斉DM・個別チャット対応
 """
 
-import csv
-import io
 import os
 import asyncio
 from datetime import datetime, timezone
 
 import discord
 from fastapi import APIRouter, Form, Request
-from fastapi.responses import JSONResponse, RedirectResponse, StreamingResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 import database
@@ -37,15 +35,29 @@ def _check_auth(request: Request):
 
 def _has_admin_role(user_id: str) -> bool:
     """運営ロール(MOD_ROLE_ID)より人数・権限を絞った管理者ロール(ADMIN_ROLE_ID)を持つか"""
-    if bot is None or not ADMIN_ROLE_ID:
+    if bot is None:
+        print("[Dashboard] 管理者ロール判定NG: Botインスタンス未初期化")
         return False
+
+    if not ADMIN_ROLE_ID:
+        print("[Dashboard] 管理者ロール判定NG: 環境変数 ADMIN_ROLE_ID が未設定（0）です")
+        return False
+
     guild = bot.get_guild(GUILD_ID)
     if guild is None:
+        print(f"[Dashboard] 管理者ロール判定NG: GUILD_ID={GUILD_ID} のサーバーが見つかりません")
         return False
+
     member = guild.get_member(int(user_id))
     if member is None:
+        print(f"[Dashboard] 管理者ロール判定NG: user_id={user_id} がメンバーキャッシュにありません")
         return False
-    return any(r.id == ADMIN_ROLE_ID for r in member.roles)
+
+    has_role = any(r.id == ADMIN_ROLE_ID for r in member.roles)
+    if not has_role:
+        role_ids = [r.id for r in member.roles]
+        print(f"[Dashboard] 管理者ロール判定NG: user_id={user_id} は ADMIN_ROLE_ID={ADMIN_ROLE_ID} を保持していません（保有ロールID: {role_ids}）")
+    return has_role
 
 
 def _check_admin(request: Request):
@@ -188,49 +200,6 @@ async def delete_punishment(
 
     database.delete_punishment(punishment_id)
     return JSONResponse({"ok": True})
-
-
-# ─────────────────────────────────────────────────────────
-# CSV ダウンロード
-# ─────────────────────────────────────────────────────────
-
-def _make_csv(rows: list[dict], filename: str) -> StreamingResponse:
-    if not rows:
-        output = io.StringIO()
-        output.write("データなし\n")
-        output.seek(0)
-        return StreamingResponse(
-            iter([output.getvalue()]),
-            media_type="text/csv; charset=utf-8-sig",
-            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
-        )
-    output = io.StringIO()
-    writer = csv.DictWriter(output, fieldnames=rows[0].keys())
-    writer.writeheader()
-    writer.writerows(rows)
-    output.seek(0)
-    bom = "\ufeff"
-    return StreamingResponse(
-        iter([bom + output.getvalue()]),
-        media_type="text/csv; charset=utf-8-sig",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
-    )
-
-
-@router.get("/api/csv/punishments", include_in_schema=False)
-async def csv_punishments(request: Request):
-    result = _check_auth(request)
-    if isinstance(result, RedirectResponse):
-        return result
-    return _make_csv(database.get_all_punishments_for_csv(), "punishments.csv")
-
-
-@router.get("/api/csv/invites", include_in_schema=False)
-async def csv_invites(request: Request):
-    result = _check_auth(request)
-    if isinstance(result, RedirectResponse):
-        return result
-    return _make_csv(database.get_all_invites_for_csv(), "invites.csv")
 
 
 # ─────────────────────────────────────────────────────────
