@@ -213,10 +213,40 @@ async def bulk_dm_page(request: Request):
         return result
     session = result
 
+    keepalive_thread_id  = database.get_setting("keepalive_thread_id") or ""
+    keepalive_interval_min = database.get_setting("keepalive_interval_min") or "60"
+
     return templates.TemplateResponse("bulk_dm.html", {
         "request": request,
         "session": session,
+        "keepalive_thread_id": keepalive_thread_id,
+        "keepalive_interval_min": keepalive_interval_min,
     })
+
+
+@router.post("/api/keepalive-thread", include_in_schema=False)
+async def set_keepalive_thread(
+    request: Request,
+    thread_id: str = Form(...),
+    interval_min: str = Form(...),
+):
+    """フォーラムのキープアライブ対象スレッドID・送信間隔を変更する"""
+    result = _check_admin(request)
+    if isinstance(result, RedirectResponse):
+        return JSONResponse({"ok": False, "error": "forbidden"}, status_code=403)
+
+    thread_id    = thread_id.strip()
+    interval_min = interval_min.strip()
+
+    if thread_id and not thread_id.isdigit():
+        return JSONResponse({"ok": False, "error": "スレッドIDは数字のみで入力してください"}, status_code=400)
+
+    if not interval_min.isdigit() or int(interval_min) < 1:
+        return JSONResponse({"ok": False, "error": "間隔は1分以上の数字で入力してください"}, status_code=400)
+
+    database.set_setting("keepalive_thread_id", thread_id)
+    database.set_setting("keepalive_interval_min", interval_min)
+    return JSONResponse({"ok": True})
 
 
 @router.post("/api/bulk-dm/send", include_in_schema=False)
