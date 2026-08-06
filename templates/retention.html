@@ -10,7 +10,17 @@
 <body>
   <nav class="nav-top">
     <span class="nav-top-logo"><i class="fa-solid fa-terminal"></i> Guide Base + / Dashboard</span>
+    <label class="theme-toggle" title="テーマ切替">
+      <input type="checkbox" id="themeChk">
+      <span class="theme-toggle-track"></span>
+      <span class="theme-toggle-thumb"><span id="themeIcon">☀️</span></span>
+    </label>
     <div class="nav-top-user">
+      {% if session.avatar %}
+      <div class="nav-top-avatar">
+        <img src="https://cdn.discordapp.com/avatars/{{ session.user_id }}/{{ session.avatar }}.png" alt="">
+      </div>
+      {% endif %}
       {{ session.username }}
       <a href="/logout" style="color:var(--text-sub); font-size:12px; margin-left:8px;"><i class="fa-solid fa-right-from-bracket"></i></a>
     </div>
@@ -22,12 +32,6 @@
         <a href="/analytics"><i class="fa-solid fa-chart-bar"></i> 分析</a>
         <a href="/retention" class="active"><i class="fa-solid fa-chart-pie"></i> 定着率</a>
         <a href="/punishments"><i class="fa-solid fa-gavel"></i> 処罰履歴</a>
-      </nav>
-      <hr class="sidebar-divider">
-      <div class="sidebar-label">Export</div>
-      <nav class="sidebar-nav">
-        <a href="/api/csv/punishments" target="_blank"><i class="fa-solid fa-file-csv"></i> 処罰履歴CSV</a>
-        <a href="/api/csv/invites" target="_blank"><i class="fa-solid fa-file-csv"></i> 招待リンクCSV</a>
       </nav>
     </aside>
     <main class="main-content">
@@ -105,8 +109,18 @@
     </main>
   </div>
   <script>
+    const chk  = document.getElementById('themeChk');
+    const icon = document.getElementById('themeIcon');
     const saved = localStorage.getItem('theme') || 'dark';
     document.documentElement.setAttribute('data-theme', saved);
+    chk.checked = saved === 'light';
+    icon.textContent = saved === 'light' ? '🌙' : '☀️';
+    chk.addEventListener('change', () => {
+      const t = chk.checked ? 'light' : 'dark';
+      document.documentElement.setAttribute('data-theme', t);
+      localStorage.setItem('theme', t);
+      icon.textContent = t === 'light' ? '🌙' : '☀️';
+    });
   </script>
   <!-- モバイル用ボトムナビ -->
   <nav class="dash-mobile-nav">
