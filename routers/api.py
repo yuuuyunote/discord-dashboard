@@ -213,39 +213,62 @@ async def bulk_dm_page(request: Request):
         return result
     session = result
 
-    keepalive_thread_id  = database.get_setting("keepalive_thread_id") or ""
+    keepalive_threads      = database.get_keepalive_threads()
     keepalive_interval_min = database.get_setting("keepalive_interval_min") or "60"
 
     return templates.TemplateResponse("bulk_dm.html", {
         "request": request,
         "session": session,
-        "keepalive_thread_id": keepalive_thread_id,
+        "keepalive_threads": keepalive_threads,
         "keepalive_interval_min": keepalive_interval_min,
     })
 
 
-@router.post("/api/keepalive-thread", include_in_schema=False)
-async def set_keepalive_thread(
-    request: Request,
-    thread_id: str = Form(...),
-    interval_min: str = Form(...),
-):
-    """フォーラムのキープアライブ対象スレッドID・送信間隔を変更する"""
+@router.post("/api/keepalive-interval", include_in_schema=False)
+async def set_keepalive_interval(request: Request, interval_min: str = Form(...)):
+    """フォーラムキープアライブの送信間隔（分）を変更する（全スレッド共通）"""
     result = _check_admin(request)
     if isinstance(result, RedirectResponse):
         return JSONResponse({"ok": False, "error": "forbidden"}, status_code=403)
 
-    thread_id    = thread_id.strip()
     interval_min = interval_min.strip()
-
-    if thread_id and not thread_id.isdigit():
-        return JSONResponse({"ok": False, "error": "スレッドIDは数字のみで入力してください"}, status_code=400)
-
     if not interval_min.isdigit() or int(interval_min) < 1:
         return JSONResponse({"ok": False, "error": "間隔は1分以上の数字で入力してください"}, status_code=400)
 
-    database.set_setting("keepalive_thread_id", thread_id)
     database.set_setting("keepalive_interval_min", interval_min)
+    return JSONResponse({"ok": True})
+
+
+@router.post("/api/keepalive-thread/add", include_in_schema=False)
+async def add_keepalive_thread(
+    request: Request,
+    thread_id: str = Form(...),
+    label: str = Form(""),
+):
+    """フォーラムキープアライブの対象スレッドを追加する"""
+    result = _check_admin(request)
+    if isinstance(result, RedirectResponse):
+        return JSONResponse({"ok": False, "error": "forbidden"}, status_code=403)
+
+    thread_id = thread_id.strip()
+    label     = label.strip()
+
+    if not thread_id or not thread_id.isdigit():
+        return JSONResponse({"ok": False, "error": "スレッドIDは数字のみで入力してください"}, status_code=400)
+
+    now = datetime.now(timezone.utc).isoformat()
+    database.add_keepalive_thread(thread_id, label, now)
+    return JSONResponse({"ok": True})
+
+
+@router.post("/api/keepalive-thread/remove", include_in_schema=False)
+async def remove_keepalive_thread(request: Request, thread_id: str = Form(...)):
+    """フォーラムキープアライブの対象スレッドを削除する"""
+    result = _check_admin(request)
+    if isinstance(result, RedirectResponse):
+        return JSONResponse({"ok": False, "error": "forbidden"}, status_code=403)
+
+    database.remove_keepalive_thread(thread_id.strip())
     return JSONResponse({"ok": True})
 
 
