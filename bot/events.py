@@ -7,7 +7,7 @@ bot/events.py
 
 import asyncio
 import os
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 from typing import Optional
 
 import discord
@@ -17,7 +17,6 @@ import database
 GUILD_ID           = int(os.getenv("GUILD_ID", "0"))
 MOD_ROLE_ID        = int(os.getenv("MOD_ROLE_ID", "0"))
 FIRST_MSG_ROLE_ID  = int(os.getenv("FIRST_MSG_ROLE_ID", "0"))
-REPORT_CHANNEL_ID  = int(os.getenv("REPORT_CHANNEL_ID", "0"))
 DM_REPLY_CHANNEL_ID = int(os.getenv("DM_REPLY_CHANNEL_ID", "0"))
 
 # ポーリング間隔を15秒に短縮
@@ -30,6 +29,7 @@ _invite_cache: dict[str, int] = {}
 _activity_buffer: list[tuple[str, str, str]] = []
 _invite_msg_buffer: dict[str, int] = {}
 ACTIVITY_FLUSH_INTERVAL = 60
+THREAD_KEEPALIVE_MESSAGE  = "."
 
 # user_id → 招待コード のキャッシュ（on_messageで毎回DBを読みに行かないため）
 _user_invite_cache: dict[str, Optional[str]] = {}
@@ -84,10 +84,13 @@ async def _handle_dm_reply(bot: discord.Client, message: discord.Message) -> Non
     print(f"[Bot] DM返信受信: {message.author} ({user_id}) | {content[:50]}")
 
     if not DM_REPLY_CHANNEL_ID:
+        print("[Bot] DM返信通知NG: 環境変数 DM_REPLY_CHANNEL_ID が未設定（0）です")
         return
 
     channel = bot.get_channel(DM_REPLY_CHANNEL_ID)
     if channel is None:
+        print(f"[Bot] DM返信通知NG: DM_REPLY_CHANNEL_ID={DM_REPLY_CHANNEL_ID} のチャンネルが見つかりません"
+              f"（IDが誤っているか、Botがそのチャンネルを閲覧できない可能性があります）")
         return
 
     try:
@@ -176,9 +179,9 @@ def setup_events(bot: discord.Client) -> None:
 
         _last_audit_check = _load_last_audit_check()
         bot.loop.create_task(_audit_log_poller(bot))
-        bot.loop.create_task(_weekly_report_scheduler(bot))
         bot.loop.create_task(_retention_checker(bot))
         bot.loop.create_task(_activity_flusher(bot))
+        bot.loop.create_task(_thread_keepalive_pinger(bot))
         print("[Bot] 全タスク起動完了")
 
     @bot.event
@@ -575,60 +578,57 @@ async def _audit_log_poller(bot: discord.Client) -> None:
 
 
 # ─────────────────────────────────────────────────────────
-# 週次レポート自動送信（月曜朝9時 JST）
+# フォーラムスレッド キープアライブ
+# 指定スレッドに固定メッセージを送信→約1秒後に削除する。
+# 対象スレッドID・送信間隔はダッシュボードからいつでも変更できる（bot_stateに保存）。
 # ─────────────────────────────────────────────────────────
 
-async def _weekly_report_scheduler(bot: discord.Client) -> None:
-    while not bot.is_closed():
-        now = datetime.now(timezone.utc)
-        days_until_monday = (7 - now.weekday()) % 7
-        if days_until_monday == 0 and now.hour >= 0:
-            days_until_monday = 7
-        next_monday  = now.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=days_until_monday)
-        wait_seconds = (next_monday - now).total_seconds()
-        print(f"[Bot] 次回レポート送信まで: {int(wait_seconds // 3600)}時間")
-        await asyncio.sleep(wait_seconds)
-        await _send_weekly_report(bot)
+DEFAULT_KEEPALIVE_INTERVAL_MIN = 60  # 未設定時のデフォルト（分）
 
 
-async def _send_weekly_report(bot: discord.Client) -> None:
-    guild   = bot.get_guild(GUILD_ID)
-    channel = bot.get_channel(REPORT_CHANNEL_ID)
-    if not channel:
-        print("[Bot] レポートチャンネルが見つかりません")
-        return
-
+def _get_keepalive_interval_sec() -> int:
+    raw = database.get_setting("keepalive_interval_min")
     try:
-        stats        = database.get_weekly_stats()
-        member_count = guild.member_count if guild else "不明"
+        minutes = int(raw) if raw else DEFAULT_KEEPALIVE_INTERVAL_MIN
+    except ValueError:
+        minutes = DEFAULT_KEEPALIVE_INTERVAL_MIN
+    minutes = max(minutes, 1)  # 1分未満は事故防止のため許可しない
+    return minutes * 60
 
-        top_ch_lines = []
-        for i, ch in enumerate(stats["top_channels"], 1):
-            ch_obj  = bot.get_channel(int(ch["channel_id"])) if guild else None
-            ch_name = f"#{ch_obj.name}" if ch_obj else ch["channel_id"]
-            top_ch_lines.append(f"{i}. {ch_name}（{ch['cnt']}件）")
 
-        top_ch_text = "\n".join(top_ch_lines) if top_ch_lines else "データなし"
+async def _thread_keepalive_pinger(bot: discord.Client) -> None:
+    while not bot.is_closed():
+        await asyncio.sleep(_get_keepalive_interval_sec())
 
-        embed = discord.Embed(
-            title="📊 週次サーバーレポート",
-            color=0x00C896,
-            timestamp=datetime.now(timezone.utc),
-        )
-        embed.add_field(name="👥 現在のメンバー数", value=f"{member_count}人", inline=True)
-        embed.add_field(name="📥 今週の入室数",     value=f"{stats['joins']}人", inline=True)
-        embed.add_field(name="📤 今週の退室数",     value=f"{stats['leaves']}人", inline=True)
-        embed.add_field(name="⚡ 即抜け数",         value=f"{stats['instant_leaves']}人", inline=True)
-        embed.add_field(name="💬 今週の発言数",     value=f"{stats['messages']:,}件", inline=True)
-        embed.add_field(name="🔨 今週の処罰数",     value=f"{stats['punishments']}件", inline=True)
-        embed.add_field(name="🔥 チャンネル熱量TOP3", value=top_ch_text, inline=False)
-        embed.set_footer(text="Guide Base + Community Dashboard")
+        threads = database.get_keepalive_threads()
+        if not threads:
+            continue  # 未設定の間は何もしない
 
-        await channel.send(embed=embed)
-        print("[Bot] 週次レポート送信完了")
+        for i, row in enumerate(threads):
+            thread_id = row["thread_id"]
 
-    except Exception as e:
-        print(f"[Bot] 週次レポート送信エラー: {e}")
+            try:
+                thread = bot.get_channel(int(thread_id))
+                if thread is None:
+                    thread = await bot.fetch_channel(int(thread_id))
+            except (discord.NotFound, discord.Forbidden) as e:
+                print(f"[Bot] キープアライブNG: スレッド(ID={thread_id})が見つからないか閲覧できません: {e}")
+                continue
+            except Exception as e:
+                print(f"[Bot] キープアライブNG: スレッド取得エラー: {e}")
+                continue
+
+            try:
+                sent = await thread.send(THREAD_KEEPALIVE_MESSAGE)
+                await asyncio.sleep(1)
+                await sent.delete()
+                print(f"[Bot] キープアライブ送信完了: スレッド(ID={thread_id})")
+            except Exception as e:
+                print(f"[Bot] キープアライブNG: 送信・削除エラー: {e}")
+
+            # 複数スレッドを一気に叩かないよう、間に少し間隔を空ける
+            if i < len(threads) - 1:
+                await asyncio.sleep(0.5)
 
 
 # ─────────────────────────────────────────────────────────
