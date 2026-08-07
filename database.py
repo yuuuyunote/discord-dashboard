@@ -105,6 +105,13 @@ def init_db() -> None:
             value TEXT NOT NULL
         )""", ()),
 
+        # 新規：フォーラムスレッド キープアライブの対象スレッド一覧（複数登録可）
+        ("""CREATE TABLE IF NOT EXISTS keepalive_threads (
+            thread_id TEXT PRIMARY KEY,
+            label     TEXT NOT NULL DEFAULT '',
+            added_at  TEXT NOT NULL
+        )""", ()),
+
         # 新規：個別チャット形式でのDM対応管理
         # （dm_repliesは片方向専用だったため、双方向のスレッド管理に置き換え）
         ("""CREATE TABLE IF NOT EXISTS dm_threads (
@@ -151,6 +158,28 @@ def set_setting(key: str, value: str) -> None:
         "INSERT INTO bot_state (key, value) VALUES (%s, %s) "
         "ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value",
         (key, value),
+    )
+
+
+# ─────────────────────────────────────────────────────────
+# keepalive_threads（フォーラムスレッド キープアライブの対象一覧）
+# ─────────────────────────────────────────────────────────
+
+def add_keepalive_thread(thread_id: str, label: str, added_at: str) -> None:
+    _execute(
+        "INSERT INTO keepalive_threads (thread_id, label, added_at) VALUES (%s,%s,%s) "
+        "ON CONFLICT (thread_id) DO UPDATE SET label = EXCLUDED.label",
+        (thread_id, label, added_at),
+    )
+
+
+def remove_keepalive_thread(thread_id: str) -> None:
+    _execute("DELETE FROM keepalive_threads WHERE thread_id = %s", (thread_id,))
+
+
+def get_keepalive_threads() -> list[dict]:
+    return _execute(
+        "SELECT thread_id, label, added_at FROM keepalive_threads ORDER BY added_at ASC"
     )
 
 
