@@ -7,7 +7,7 @@ bot/events.py
 
 import asyncio
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Optional
 
 import discord
@@ -598,14 +598,27 @@ def _get_keepalive_interval_sec() -> int:
 
 async def _thread_keepalive_pinger(bot: discord.Client) -> None:
     while not bot.is_closed():
-        await asyncio.sleep(_get_keepalive_interval_sec())
+        interval_sec = _get_keepalive_interval_sec()
+        await asyncio.sleep(interval_sec)
 
         threads = database.get_keepalive_threads()
         if not threads:
             continue  # 未設定の間は何もしない
 
+        now    = datetime.now(timezone.utc)
+        cutoff = now - timedelta(seconds=interval_sec * 0.5)
+
         for i, row in enumerate(threads):
             thread_id = row["thread_id"]
+
+            # Renderのデプロイ切り替え等で複数プロセスが同時に動いていても
+            # 二重送信しないよう、DB側で排他制御する
+            claimed = database.try_claim_keepalive_send(
+                thread_id, now.isoformat(), cutoff.isoformat()
+            )
+            if not claimed:
+                print(f"[Bot] キープアライブスキップ: スレッド(ID={thread_id})は直近に送信済みのためスキップ")
+                continue
 
             try:
                 thread = bot.get_channel(int(thread_id))
