@@ -107,10 +107,13 @@ def init_db() -> None:
 
         # 新規：フォーラムスレッド キープアライブの対象スレッド一覧（複数登録可）
         ("""CREATE TABLE IF NOT EXISTS keepalive_threads (
-            thread_id TEXT PRIMARY KEY,
-            label     TEXT NOT NULL DEFAULT '',
-            added_at  TEXT NOT NULL
+            thread_id    TEXT PRIMARY KEY,
+            label        TEXT NOT NULL DEFAULT '',
+            added_at     TEXT NOT NULL,
+            last_sent_at TEXT
         )""", ()),
+        # 既存テーブルに対するマイグレーション（初回追加時はNO-OP）
+        ("ALTER TABLE keepalive_threads ADD COLUMN IF NOT EXISTS last_sent_at TEXT", ()),
 
         # 新規：個別チャット形式でのDM対応管理
         # （dm_repliesは片方向専用だったため、双方向のスレッド管理に置き換え）
@@ -181,6 +184,22 @@ def get_keepalive_threads() -> list[dict]:
     return _execute(
         "SELECT thread_id, label, added_at FROM keepalive_threads ORDER BY added_at ASC"
     )
+
+
+def try_claim_keepalive_send(thread_id: str, now_iso: str, cutoff_iso: str) -> bool:
+    """
+    Renderのデプロイ切り替え時などに複数プロセスが同時に動いていても
+    二重送信しないための排他制御。
+    last_sent_atがNULL、またはcutoff_isoより古い場合のみ更新に成功しTrueを返す。
+    （他プロセスが先にこの行を更新済みなら、WHERE条件に一致せずFalseになる）
+    """
+    rows = _execute(
+        "UPDATE keepalive_threads SET last_sent_at = %s "
+        "WHERE thread_id = %s AND (last_sent_at IS NULL OR last_sent_at < %s) "
+        "RETURNING thread_id",
+        (now_iso, thread_id, cutoff_iso),
+    )
+    return bool(rows)
 
 
 # ─────────────────────────────────────────────────────────
