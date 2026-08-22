@@ -134,7 +134,27 @@ def init_db() -> None:
         ("CREATE UNIQUE INDEX IF NOT EXISTS idx_dmmsg_msgid ON dm_messages(message_id)", ()),
         ("CREATE INDEX IF NOT EXISTS idx_dmmsg_user ON dm_messages(user_id)", ()),
 
+        # 新規：通報の受付〜承認/却下（/report）
+        # categoriesはinitial_rolesと同じ流儀でJSON文字列としてTEXTに入れる
+        ("""CREATE TABLE IF NOT EXISTS reports (
+            id                             SERIAL PRIMARY KEY,
+            reporter_id                    TEXT NOT NULL,
+            reporter_username              TEXT NOT NULL,
+            target_id                      TEXT NOT NULL,
+            target_username                TEXT NOT NULL,
+            categories                     TEXT NOT NULL DEFAULT '[]',
+            note                           TEXT,
+            status                         TEXT NOT NULL DEFAULT 'pending',
+            maintainer_channel_message_id  TEXT,
+            rejection_reason               TEXT,
+            created_at                     TEXT NOT NULL,
+            decided_at                     TEXT
+        )""", ()),
+
         # インデックス
+        ("CREATE INDEX IF NOT EXISTS idx_reports_reporter ON reports(reporter_id)", ()),
+        ("CREATE INDEX IF NOT EXISTS idx_reports_target   ON reports(target_id)", ()),
+        ("CREATE INDEX IF NOT EXISTS idx_reports_status   ON reports(status)", ()),
         ("CREATE INDEX IF NOT EXISTS idx_join_user    ON join_logs(user_id)", ()),
         ("CREATE INDEX IF NOT EXISTS idx_join_invite  ON join_logs(invite_code)", ()),
         ("CREATE INDEX IF NOT EXISTS idx_act_user     ON activity_logs(user_id)", ()),
@@ -638,3 +658,76 @@ def get_leave_reason_stats() -> dict:
         "short":   short_count,
         "long":    long_count,
     }
+
+
+# ─────────────────────────────────────────────────────────
+# reports（/report の受付〜承認/却下）
+# ─────────────────────────────────────────────────────────
+
+def insert_pending_report(
+    reporter_id: str,
+    reporter_username: str,
+    target_id: str,
+    target_username: str,
+    categories: list[str],
+    note: Optional[str],
+) -> int:
+    now = datetime.now(timezone.utc).isoformat()
+    rows = _execute(
+        "INSERT INTO reports "
+        "(reporter_id, reporter_username, target_id, target_username, categories, note, status, created_at) "
+        "VALUES (%s,%s,%s,%s,%s,%s,'pending',%s) RETURNING id",
+        (
+            reporter_id,
+            reporter_username,
+            target_id,
+            target_username,
+            json.dumps(categories, ensure_ascii=False),
+            note,
+            now,
+        ),
+    )
+    return rows[0]["id"]
+
+
+def set_report_maintainer_message_id(report_id: int, message_id: str) -> None:
+    _execute(
+        "UPDATE reports SET maintainer_channel_message_id=%s WHERE id=%s",
+        (message_id, report_id),
+    )
+
+
+def _decode_report_row(row: dict) -> dict:
+    row["categories"] = json.loads(row["categories"])
+    return row
+
+
+def get_report(report_id: int) -> Optional[dict]:
+    rows = _execute("SELECT * FROM reports WHERE id=%s", (report_id,))
+    return _decode_report_row(rows[0]) if rows else None
+
+
+def mark_report_merged(report_id: int) -> Optional[dict]:
+    now = datetime.now(timezone.utc).isoformat()
+    _execute(
+        "UPDATE reports SET status='merged', decided_at=%s WHERE id=%s",
+        (now, report_id),
+    )
+    return get_report(report_id)
+
+
+def mark_report_rejected(report_id: int, reason: str) -> Optional[dict]:
+    now = datetime.now(timezone.utc).isoformat()
+    _execute(
+        "UPDATE reports SET status='rejected', rejection_reason=%s, decided_at=%s WHERE id=%s",
+        (reason, now, report_id),
+    )
+    return get_report(report_id)
+
+
+def get_reports_by_reporter(reporter_id: str, limit: int = 50) -> list[dict]:
+    rows = _execute(
+        "SELECT * FROM reports WHERE reporter_id=%s ORDER BY created_at DESC LIMIT %s",
+        (reporter_id, limit),
+    )
+    return [_decode_report_row(r) for r in rows]
