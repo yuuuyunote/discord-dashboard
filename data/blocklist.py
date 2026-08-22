@@ -17,8 +17,8 @@ from typing import Optional
 
 import aiohttp
 
-DATA_REPO = os.getenv("XGOMI_DATA_REPO", "")  # 例: "yuuuyu/xgomi-discord"
-DATA_BRANCH = os.getenv("XGOMI_DATA_BRANCH", "main")
+DATA_REPO = os.getenv("BLOCKLIST_DATA_REPO", "")  # 例: "yourname/xgomi-discord"
+DATA_BRANCH = os.getenv("BLOCKLIST_DATA_BRANCH", "main")
 CACHE_TTL_SECONDS = 60
 
 
@@ -35,7 +35,7 @@ class BlocklistCache:
 
     async def get(self, force_refresh: bool = False) -> list:
         if not DATA_REPO:
-            raise BlocklistFetchError("XGOMI_DATA_REPO が設定されていません。")
+            raise BlocklistFetchError("BLOCKLIST_DATA_REPO が設定されていません。")
 
         now = time.monotonic()
         if not force_refresh and self._data is not None and (now - self._fetched_at) < CACHE_TTL_SECONDS:
