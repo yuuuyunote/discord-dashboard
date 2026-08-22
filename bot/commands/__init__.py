@@ -16,11 +16,13 @@ bot/commands/check.py, bot/commands/report.py を増やして
 """
 
 import os
+from typing import Optional
 
 import discord
 from discord import app_commands
 
 from bot.commands.idlookup import handle_idlookup
+from bot.commands.check import handle_check
 
 GUILD_ID = os.getenv("GUILD_ID")
 
@@ -34,6 +36,18 @@ def setup_commands(bot: discord.Client) -> app_commands.CommandTree:
     )
     async def idlookup(interaction: discord.Interaction, message_link: str) -> None:
         await handle_idlookup(interaction, message_link)
+
+    @tree.command(name="check", description="ユーザーが通報リストに載っているか確認する")
+    @app_commands.describe(
+        user="確認するユーザー（サーバーに居ないユーザーは user_id を使用）",
+        user_id="確認するユーザーID（userと排他）",
+    )
+    async def check(
+        interaction: discord.Interaction,
+        user: Optional[discord.User] = None,
+        user_id: Optional[str] = None,
+    ) -> None:
+        await handle_check(interaction, user, user_id)
 
     async def _sync_commands() -> None:
         if GUILD_ID:
