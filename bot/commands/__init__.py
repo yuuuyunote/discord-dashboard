@@ -23,8 +23,10 @@ from discord import app_commands
 
 from bot.commands.idlookup import handle_idlookup
 from bot.commands.check import handle_check
+from bot.commands.report import handle_report
 
 GUILD_ID = os.getenv("GUILD_ID")
+MAINTAINER_CHANNEL_ID = os.getenv("MAINTAINER_CHANNEL_ID")
 
 
 def setup_commands(bot: discord.Client) -> app_commands.CommandTree:
@@ -48,6 +50,31 @@ def setup_commands(bot: discord.Client) -> app_commands.CommandTree:
         user_id: Optional[str] = None,
     ) -> None:
         await handle_check(interaction, user, user_id)
+
+    @tree.command(name="report", description="悪質なユーザーを通報する")
+    @app_commands.describe(
+        user="通報するユーザー（サーバーに居ないユーザーは user_id を使用）",
+        user_id="通報するユーザーID（userと排他）",
+        evidence_image="証拠画像（必須）",
+        note="補足（任意）",
+    )
+    async def report(
+        interaction: discord.Interaction,
+        evidence_image: discord.Attachment,
+        user: Optional[discord.User] = None,
+        user_id: Optional[str] = None,
+        note: Optional[str] = None,
+    ) -> None:
+        if not MAINTAINER_CHANNEL_ID:
+            await interaction.response.send_message(
+                "MAINTAINER_CHANNEL_ID が設定されていないため /report は利用できません。",
+                ephemeral=True,
+            )
+            return
+        channel = interaction.client.get_channel(int(MAINTAINER_CHANNEL_ID))
+        if channel is None:
+            channel = await interaction.client.fetch_channel(int(MAINTAINER_CHANNEL_ID))
+        await handle_report(interaction, user, user_id, evidence_image, note, channel)
 
     async def _sync_commands() -> None:
         if GUILD_ID:
