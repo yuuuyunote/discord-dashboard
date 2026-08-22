@@ -17,6 +17,7 @@ from fastapi.templating import Jinja2Templates
 
 import database
 from bot.events import setup_events
+from bot.commands import setup_commands  # ← 追加：スラッシュコマンド登録
 from routers import auth, api
 
 # ─── 環境変数読み込み ──────────────────────────────────────
@@ -37,6 +38,7 @@ intents.moderation      = True
 
 bot = discord.Client(intents=intents)
 setup_events(bot)
+tree = setup_commands(bot)  # ← 追加：/idlookup 等のCommandTreeをセットアップ
 
 
 # ─── FastAPI セットアップ ──────────────────────────────────
