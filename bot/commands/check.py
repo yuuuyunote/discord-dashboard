@@ -1,17 +1,11 @@
 """
 bot/commands/check.py
-/check: ユーザーが通報リスト（dist/users.json）に載っているか確認する。
+/check: ユーザーIDが通報リスト（dist/users.json）に載っているか確認する。
 
-設計メモ通り、ここで見るのは公開ブロックリストのみ。report_countや報告者自身の
-履歴（Postgres）は扱わない — そちらは/report実装時に別途。
-
-GitHubへのfetchが絡む分/idlookupより時間が読めないため、即時応答ではなく
-defer→followupにしている（/idlookupは discord.py 内部キャッシュ頼みで
-速いので即時応答のままにしてある。使い分けは意図的）。
+user_idのみを受け取る（discord.Userの選択肢は廃止）。
 """
 
 import re
-from typing import Optional
 
 import discord
 
@@ -21,30 +15,16 @@ from bot.data.blocklist import BlocklistFetchError, blocklist_cache
 SNOWFLAKE_RE = re.compile(r"^[0-9]{17,20}$")
 
 
-async def handle_check(
-    interaction: discord.Interaction,
-    user: Optional[discord.User],
-    user_id: Optional[str],
-) -> None:
-    if (user is None) == (user_id is None):
+async def handle_check(interaction: discord.Interaction, user_id: str) -> None:
+    target_id = user_id.strip()
+    if not SNOWFLAKE_RE.match(target_id):
         await interaction.response.send_message(
-            "user か user_id のどちらか一方だけを指定してください。",
+            f"`{target_id}` はDiscordのユーザーIDとして正しい形式ではありません（17〜20桁の数字）。",
             ephemeral=True,
         )
         return
 
-    if user is not None:
-        target_id = str(user.id)
-        display_hint = f"{user.name}（{user.mention}）"
-    else:
-        target_id = user_id.strip()
-        if not SNOWFLAKE_RE.match(target_id):
-            await interaction.response.send_message(
-                f"`{target_id}` はDiscordのユーザーIDとして正しい形式ではありません（17〜20桁の数字）。",
-                ephemeral=True,
-            )
-            return
-        display_hint = f"`{target_id}`"
+    display_hint = f"`{target_id}`"
 
     await interaction.response.defer(ephemeral=True)
 
