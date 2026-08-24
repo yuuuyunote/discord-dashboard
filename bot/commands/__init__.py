@@ -3,9 +3,8 @@ bot/commands/__init__.py
 スラッシュコマンド（Application Commands）のセットアップ。
 
 discord.Client は commands.Bot と違い app_commands.CommandTree を持たないため、
-ここで自分でツリーを組み立てる。/check /report を追加する際は、この下に
-bot/commands/check.py, bot/commands/report.py を増やして
-@tree.command(...) を追加していく想定。
+ここで自分でツリーを組み立てる。全コマンドともユーザーIDのみで対象を指定する
+（discord.Userの選択肢は廃止済み）。
 
 起動時sync:
 - GUILD_ID が設定されていれば、そのサーバー限定でコピー・sync（即時反映、開発中向け）
@@ -21,7 +20,6 @@ from typing import Optional
 import discord
 from discord import app_commands
 
-from bot.commands.idlookup import handle_idlookup
 from bot.commands.check import handle_check
 from bot.commands.report import handle_report
 
@@ -32,37 +30,21 @@ MAINTAINER_CHANNEL_ID = os.getenv("MAINTAINER_CHANNEL_ID")
 def setup_commands(bot: discord.Client) -> app_commands.CommandTree:
     tree = app_commands.CommandTree(bot)
 
-    @tree.command(name="idlookup", description="メッセージリンクから投稿者のユーザーID・ユーザー名を調べる")
-    @app_commands.describe(
-        message_link="対象メッセージのリンク（メッセージを右クリック/長押し→「メッセージリンクをコピー」）"
-    )
-    async def idlookup(interaction: discord.Interaction, message_link: str) -> None:
-        await handle_idlookup(interaction, message_link)
-
-    @tree.command(name="check", description="ユーザーが通報リストに載っているか確認する")
-    @app_commands.describe(
-        user="確認するユーザー（サーバーに居ないユーザーは user_id を使用）",
-        user_id="確認するユーザーID（userと排他）",
-    )
-    async def check(
-        interaction: discord.Interaction,
-        user: Optional[discord.User] = None,
-        user_id: Optional[str] = None,
-    ) -> None:
-        await handle_check(interaction, user, user_id)
+    @tree.command(name="check", description="ユーザーIDが通報リストに載っているか確認する")
+    @app_commands.describe(user_id="確認するユーザーID")
+    async def check(interaction: discord.Interaction, user_id: str) -> None:
+        await handle_check(interaction, user_id)
 
     @tree.command(name="report", description="悪質なユーザーを通報する")
     @app_commands.describe(
-        user="通報するユーザー（サーバーに居ないユーザーは user_id を使用）",
-        user_id="通報するユーザーID（userと排他）",
+        user_id="通報するユーザーID",
         evidence_image="証拠画像（必須）",
         note="補足（任意）",
     )
     async def report(
         interaction: discord.Interaction,
+        user_id: str,
         evidence_image: discord.Attachment,
-        user: Optional[discord.User] = None,
-        user_id: Optional[str] = None,
         note: Optional[str] = None,
     ) -> None:
         if not MAINTAINER_CHANNEL_ID:
@@ -74,7 +56,7 @@ def setup_commands(bot: discord.Client) -> app_commands.CommandTree:
         channel = interaction.client.get_channel(int(MAINTAINER_CHANNEL_ID))
         if channel is None:
             channel = await interaction.client.fetch_channel(int(MAINTAINER_CHANNEL_ID))
-        await handle_report(interaction, user, user_id, evidence_image, note, channel)
+        await handle_report(interaction, user_id, evidence_image, note, channel)
 
     async def _sync_commands() -> None:
         if GUILD_ID:
