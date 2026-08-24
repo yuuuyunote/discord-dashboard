@@ -330,6 +330,42 @@ def upsert_user(user_id: str, username: str, account_created: str,
         ON CONFLICT(user_id) DO UPDATE SET username=%s, updated_at=%s
     """, (user_id, username, account_created, joined_at, now, username, now))
 
+def insert_new_users_bulk(rows: list[tuple[str, str, str, Optional[str]]]) -> int:
+    """
+    (user_id, username, account_created, joined_at) のリストを1回のSQLで一括INSERTする。
+    既に存在するuser_idはON CONFLICT DO NOTHINGでそのままスキップする（更新はしない）。
+
+    起動時の既存メンバー一括インポート用。1人ずつupsert_user()を呼ぶと
+    669人なら669回psycopg2.connect()することになり、その間ずっとイベントループを
+    ブロックしてDiscordのハートビートが止まる（実際にこれが原因でbotがオフラインに
+    なっていた）。1回のバルクINSERTに置き換えることで接続を1回に減らす。
+    """
+    if not rows:
+        return 0
+    now = datetime.now(timezone.utc).isoformat()
+    values = [(user_id, username, account_created, joined_at, now) for user_id, username, account_created, joined_at in rows]
+    conn = get_conn()
+    try:
+        with conn.cursor() as cur:
+            psycopg2.extras.execute_values(
+                cur,
+                """
+                INSERT INTO users (user_id, username, account_created, joined_at, updated_at)
+                VALUES %s
+                ON CONFLICT (user_id) DO NOTHING
+                """,
+                values,
+            )
+            inserted = cur.rowcount
+        conn.commit()
+        return inserted
+    finally:
+        conn.close()
+
+def get_all_user_ids() -> set[str]:
+    rows = _execute("SELECT user_id FROM users")
+    return {r["user_id"] for r in rows}
+
 def update_user_initial_roles(user_id: str, roles: list[str]) -> None:
     now = datetime.now(timezone.utc).isoformat()
     _execute(
