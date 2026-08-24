@@ -7,6 +7,7 @@ Wispbyte用 Discord Bot のみ起動スクリプト
 import asyncio
 import os
 import glob
+from typing import Optional
 
 import discord
 
@@ -61,35 +62,34 @@ async def _import_existing_members(guild: discord.Guild) -> None:
     """
     既存メンバーを users テーブルのみに登録する。
     join_logs には追加しない（重複防止）。
+
+    以前は1人ずつ database.get_user() / upsert_user() を同期呼び出ししていた。
+    psycopg2は同期・ブロッキングで呼び出しごとに新規接続を張るため、669人分を
+    直列に処理するとその間ずっとイベントループが止まり、Discordへのハートビート
+    応答が途切れて「オフライン」と判定される原因になっていた。
+    メンバー情報はメモリ上に集めるだけにし、DB書き込みは1回のバルクINSERTに
+    まとめ、それも asyncio.to_thread() で別スレッドに逃がしている。
     """
     print("[Bot] 既存メンバーのインポートを開始...")
-    count = 0
-    skip  = 0
+
+    rows: list[tuple[str, str, str, Optional[str]]] = []
+    skip = 0
 
     async for member in guild.fetch_members(limit=None):
         if member.bot:
             skip += 1
             continue
+        rows.append((
+            str(member.id),
+            str(member),
+            member.created_at.isoformat(),
+            member.joined_at.isoformat() if member.joined_at else None,
+        ))
 
-        # usersテーブルに既にいる場合はスキップ
-        existing = database.get_user(str(member.id))
-        if existing:
-            skip += 1
-            continue
+    inserted = await asyncio.to_thread(database.insert_new_users_bulk, rows)
+    skip += len(rows) - inserted
 
-        try:
-            database.upsert_user(
-                user_id=str(member.id),
-                username=str(member),
-                account_created=member.created_at.isoformat(),
-                joined_at=member.joined_at.isoformat() if member.joined_at else None,
-            )
-            # ※ join_logsには追加しない（インポート時の重複を防ぐため）
-            count += 1
-        except Exception as e:
-            print(f"[Bot] インポートエラー: {member} → {e}")
-
-    print(f"[Bot] インポート完了: 新規登録 {count} 人 / スキップ {skip} 件")
+    print(f"[Bot] インポート完了: 新規登録 {inserted} 人 / スキップ {skip} 件")
 
 
 async def _sync_commands() -> None:
