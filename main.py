@@ -1,14 +1,19 @@
 """
 main.py
-Discord Bot（discord.py）と FastAPI（uvicorn）を
-同一の asyncio イベントループで並行稼働させるメインスクリプト
+FastAPI（uvicorn）を起動するダッシュボード専用のメインスクリプト。
+
+以前はここでdiscord.Client（Gateway接続）も同時に起動していたが、Pterodactyl側
+（bot_only.py）が本番のbotとして稼働するようになったため、Render側でも同じ
+トークンでbotを起動すると二重接続になり、Discordのグローバルレート制限（429）に
+達してOAuthログインまで巻き添えで失敗する事故が起きた。
+そのため、Render側はGateway接続を持たない純粋なダッシュボードに切り離した。
+管理者ロール判定・DM送信など、以前はdiscord.pyのクライアント経由でやっていた
+処理は discord_rest.py 経由のREST API直接呼び出しに置き換えてある。
 """
 
-import asyncio
 import os
 from datetime import datetime, timezone, timedelta
 
-import discord
 import uvicorn
 from dotenv import load_dotenv
 from fastapi import FastAPI
@@ -16,29 +21,13 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 import database
-from bot.events import setup_events
-from bot.commands import setup_commands  # ← 追加：スラッシュコマンド登録
 from routers import auth, api
 
 # ─── 環境変数読み込み ──────────────────────────────────────
 load_dotenv()
 
-DISCORD_TOKEN = os.getenv("DISCORD_TOKEN", "")
-HOST          = os.getenv("HOST", "0.0.0.0")
-PORT          = int(os.getenv("PORT", "8000"))
-
-
-# ─── Discord Bot セットアップ ──────────────────────────────
-
-intents = discord.Intents.default()
-intents.members         = True
-intents.message_content = True
-intents.presences       = True
-intents.moderation      = True
-
-bot = discord.Client(intents=intents)
-setup_events(bot)
-tree = setup_commands(bot)  # ← 追加：/idlookup 等のCommandTreeをセットアップ
+HOST = os.getenv("HOST", "0.0.0.0")
+PORT = int(os.getenv("PORT", "8000"))
 
 
 # ─── FastAPI セットアップ ──────────────────────────────────
@@ -73,27 +62,20 @@ app.include_router(api.router)
 
 auth.templates = templates
 api.templates  = templates
-api.bot        = bot
 
 
 # ─── 起動エントリーポイント ────────────────────────────────
 
-async def main() -> None:
+def main() -> None:
     database.init_db()
 
-    config = uvicorn.Config(
-        app=app,
+    uvicorn.run(
+        app,
         host=HOST,
         port=PORT,
         log_level="info",
     )
-    server = uvicorn.Server(config)
-
-    await asyncio.gather(
-        bot.start(DISCORD_TOKEN),
-        server.serve(),
-    )
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()
