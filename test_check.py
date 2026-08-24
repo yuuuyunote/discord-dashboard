@@ -121,22 +121,9 @@ def make_interaction():
 
 
 class TestHandleCheck(unittest.TestCase):
-    def test_neither_user_nor_id_given(self):
-        interaction = make_interaction()
-        run(handle_check(interaction, None, None))
-        interaction.response.send_message.assert_awaited_once()
-        interaction.response.defer.assert_not_awaited()
-
-    def test_both_user_and_id_given(self):
-        interaction = make_interaction()
-        fake_user = MagicMock()
-        run(handle_check(interaction, fake_user, "123456789012345678"))
-        interaction.response.send_message.assert_awaited_once()
-        interaction.response.defer.assert_not_awaited()
-
     def test_invalid_user_id_format(self):
         interaction = make_interaction()
-        run(handle_check(interaction, None, "not-a-snowflake"))
+        run(handle_check(interaction, "not-a-snowflake"))
         (msg,), _ = interaction.response.send_message.call_args
         self.assertIn("正しい形式ではありません", msg)
         interaction.response.defer.assert_not_awaited()
@@ -144,7 +131,7 @@ class TestHandleCheck(unittest.TestCase):
     def test_found_entry_reports_categories_and_note(self):
         interaction = make_interaction()
         with patch("bot.commands.check.blocklist_cache.find", new=AsyncMock(return_value=SAMPLE_ENTRY)):
-            run(handle_check(interaction, None, "123456789012345678"))
+            run(handle_check(interaction, "123456789012345678"))
         interaction.response.defer.assert_awaited_once_with(ephemeral=True)
         (msg,), kwargs = interaction.followup.send.call_args
         self.assertIn("登録されています", msg)
@@ -155,7 +142,7 @@ class TestHandleCheck(unittest.TestCase):
     def test_not_found_entry(self):
         interaction = make_interaction()
         with patch("bot.commands.check.blocklist_cache.find", new=AsyncMock(return_value=None)):
-            run(handle_check(interaction, None, "999999999999999999"))
+            run(handle_check(interaction, "999999999999999999"))
         (msg,), _ = interaction.followup.send.call_args
         self.assertIn("登録されていません", msg)
 
@@ -165,7 +152,7 @@ class TestHandleCheck(unittest.TestCase):
             "bot.commands.check.blocklist_cache.find",
             new=AsyncMock(side_effect=BlocklistFetchError("timeout")),
         ):
-            run(handle_check(interaction, None, "123456789012345678"))
+            run(handle_check(interaction, "123456789012345678"))
         (msg,), _ = interaction.followup.send.call_args
         self.assertIn("取得に失敗しました", msg)
 
