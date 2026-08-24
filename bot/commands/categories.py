@@ -10,7 +10,7 @@ CATEGORY_LABELS = {
     "phishing": "フィッシング",
     "impersonation": "なりすまし",
     "raid-spam": "荒らし・スパム",
-    "dm-solicitation": "DM勧誘",
+    "dm-solicitation": "悪質な勧誘",
     "harassment": "嫌がらせ",
     "doxxing": "個人情報の暴露",
     "hate-speech": "差別的言動",
