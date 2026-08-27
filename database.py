@@ -2,6 +2,7 @@
 database.py
 Neon（PostgreSQL）対応版
 テーブル追加：user_notes, retention_checks
+reports拡張：target_type / creator_or_developer_id（user/server/bot対応）
 """
 
 import os
@@ -150,11 +151,18 @@ def init_db() -> None:
             created_at                     TEXT NOT NULL,
             decided_at                     TEXT
         )""", ()),
+        # 既存テーブルに対するマイグレーション（user/server/bot拡張分）
+        # target_typeが無い既存行は'user'扱いにする（このカラム追加以前は
+        # user通報しか存在しなかったため、デフォルト値がそのまま正しい）
+        ("ALTER TABLE reports ADD COLUMN IF NOT EXISTS target_type TEXT NOT NULL DEFAULT 'user'", ()),
+        # server通報のcreator_id / bot通報のdeveloper_idを共用する任意カラム
+        ("ALTER TABLE reports ADD COLUMN IF NOT EXISTS creator_or_developer_id TEXT", ()),
 
         # インデックス
-        ("CREATE INDEX IF NOT EXISTS idx_reports_reporter ON reports(reporter_id)", ()),
-        ("CREATE INDEX IF NOT EXISTS idx_reports_target   ON reports(target_id)", ()),
-        ("CREATE INDEX IF NOT EXISTS idx_reports_status   ON reports(status)", ()),
+        ("CREATE INDEX IF NOT EXISTS idx_reports_reporter    ON reports(reporter_id)", ()),
+        ("CREATE INDEX IF NOT EXISTS idx_reports_target      ON reports(target_id)", ()),
+        ("CREATE INDEX IF NOT EXISTS idx_reports_status      ON reports(status)", ()),
+        ("CREATE INDEX IF NOT EXISTS idx_reports_target_type ON reports(target_type)", ()),
         ("CREATE INDEX IF NOT EXISTS idx_join_user    ON join_logs(user_id)", ()),
         ("CREATE INDEX IF NOT EXISTS idx_join_invite  ON join_logs(invite_code)", ()),
         ("CREATE INDEX IF NOT EXISTS idx_act_user     ON activity_logs(user_id)", ()),
@@ -698,26 +706,32 @@ def get_leave_reason_stats() -> dict:
 
 # ─────────────────────────────────────────────────────────
 # reports（/report の受付〜承認/却下）
+# user/server/bot 拡張分: target_type, creator_or_developer_id
 # ─────────────────────────────────────────────────────────
 
 def insert_pending_report(
     reporter_id: str,
     reporter_username: str,
+    target_type: str,
     target_id: str,
     target_username: str,
     categories: list[str],
     note: Optional[str],
+    creator_or_developer_id: Optional[str] = None,
 ) -> int:
     now = datetime.now(timezone.utc).isoformat()
     rows = _execute(
         "INSERT INTO reports "
-        "(reporter_id, reporter_username, target_id, target_username, categories, note, status, created_at) "
-        "VALUES (%s,%s,%s,%s,%s,%s,'pending',%s) RETURNING id",
+        "(reporter_id, reporter_username, target_type, target_id, target_username, "
+        " creator_or_developer_id, categories, note, status, created_at) "
+        "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,'pending',%s) RETURNING id",
         (
             reporter_id,
             reporter_username,
+            target_type,
             target_id,
             target_username,
+            creator_or_developer_id,
             json.dumps(categories, ensure_ascii=False),
             note,
             now,
