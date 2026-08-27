@@ -6,6 +6,8 @@ bot/ui/report_flow.py
    target_typeに応じてカテゴリ選択肢を出し分ける。
 2. ApprovalView — メンテナ専用チャンネルに投稿される承認/却下ボタン。
    target_typeに応じてgithub.py側の対応する保存先（users/servers/bots）へcommitする。
+   server/bot通報の場合、判明している作成者/開発者IDをusers/側にも自動登録する
+   （malicious-server-creator / malicious-bot-developer カテゴリ、承認と同時に自動commit）。
 3. RejectReasonModal — 却下時の理由入力。
 """
 
@@ -32,6 +34,9 @@ CONFIRMATION_TEXT = (
 )
 
 _RELATED_ID_FIELD_LABEL = {"server": "作成者ID", "bot": "開発者ID"}
+
+# server/bot通報の承認時、判明している作成者/開発者IDをuser側へ自動登録する際のカテゴリ
+_AUTO_REGISTER_CATEGORY = {"server": "malicious-server-creator", "bot": "malicious-bot-developer"}
 
 
 class CategorySelect(discord.ui.Select):
@@ -182,10 +187,65 @@ class RejectReasonModal(discord.ui.Modal, title="却下理由"):
         await self.approval_view.finalize_rejection(interaction, str(self.reason))
 
 
+def _auto_register_note(target_type: str, target_id: str) -> str:
+    if target_type == "server":
+        return f"悪質サーバー（`{target_id}`）の作成者として自動登録"
+    return f"悪質Bot（`{target_id}`）の開発者として自動登録"
+
+
 class ApprovalView(discord.ui.View):
     def __init__(self, *, report_id: int, timeout: Optional[float] = None):
         super().__init__(timeout=timeout)
         self.report_id = report_id
+
+    async def _auto_register_creator_or_developer(
+        self, interaction: discord.Interaction, report: "db.Report", today: str
+    ) -> None:
+        """
+        server/bot通報の承認と同時に、判明している作成者/開発者IDをuser側にも
+        自動登録する（malicious-server-creator / malicious-bot-developer カテゴリ）。
+        server/bot側のcommitは既に完了しているため、ここでの失敗は承認処理
+        全体を失敗させず、メンテナチャンネルへの通知のみに留める。
+        """
+        category = _AUTO_REGISTER_CATEGORY.get(report.target_type)
+        if category is None or not report.creator_or_developer_id:
+            return
+
+        related_id = report.creator_or_developer_id
+
+        try:
+            related_user = await interaction.client.fetch_user(int(related_id))
+            related_username = related_user.name
+        except (discord.NotFound, discord.HTTPException, ValueError):
+            # 取得できなくても登録自体は続行する（表示名の代わりにIDを使う）
+            related_username = related_id
+
+        try:
+            existing = await get_existing_record("user", related_id)
+            merged = merge_records(
+                "user",
+                existing,
+                target_id=related_id,
+                display_snapshot=related_username,
+                categories=[category],
+                note=_auto_register_note(report.target_type, report.target_id),
+                today=today,
+            )
+            await commit_record(
+                "user",
+                merged,
+                commit_message=(
+                    f"report: auto-register {related_id} as {category} "
+                    f"(from {report.target_type} report #{report.id})"
+                ),
+            )
+        except (SchemaValidationError, ReportCommitError) as e:
+            await interaction.followup.send(
+                f"⚠️ 作成者/開発者（`{related_id}`）のuser側自動登録に失敗しました: {e}\n"
+                f"（{target_type_label(report.target_type)}側の通報自体は問題なく反映されています。"
+                "必要であれば手動で /report を使ってください。）",
+                ephemeral=True,
+            )
 
     @discord.ui.button(label="承認", style=discord.ButtonStyle.success)
     async def approve(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
@@ -229,6 +289,10 @@ class ApprovalView(discord.ui.View):
             for item in self.children:
                 item.disabled = False
             return
+
+        # server/bot通報で作成者/開発者IDが判明していれば、user側にも自動登録する。
+        # ここでの失敗は上のcommitを取り消さない（best-effort、通知のみ）。
+        await self._auto_register_creator_or_developer(interaction, report, today)
 
         await db.mark_merged(self.report_id)
 
