@@ -3,8 +3,11 @@ bot/commands/__init__.py
 スラッシュコマンド（Application Commands）のセットアップ。
 
 discord.Client は commands.Bot と違い app_commands.CommandTree を持たないため、
-ここで自分でツリーを組み立てる。全コマンドともユーザーIDのみで対象を指定する
-（discord.Userの選択肢は廃止済み）。
+ここで自分でツリーを組み立てる。
+
+target_typeでuser/server/botを切り替える（サブコマンド化はせず、単一の
+/report, /checkに引数として持たせる設計）。typing.Literalを使うとdiscord.py側で
+自動的にドロップダウン選択肢になる。
 
 起動時sync:
 - GUILD_ID が設定されていれば、そのサーバー限定でコピー・sync（即時反映、開発中向け）
@@ -15,7 +18,7 @@ discord.Client は commands.Bot と違い app_commands.CommandTree を持たな�
 """
 
 import os
-from typing import Optional
+from typing import Literal, Optional
 
 import discord
 from discord import app_commands
@@ -26,26 +29,41 @@ from bot.commands.report import handle_report
 GUILD_ID = os.getenv("GUILD_ID")
 MAINTAINER_CHANNEL_ID = os.getenv("MAINTAINER_CHANNEL_ID")
 
+TargetType = Literal["user", "server", "bot"]
+
 
 def setup_commands(bot: discord.Client) -> app_commands.CommandTree:
     tree = app_commands.CommandTree(bot)
 
-    @tree.command(name="check", description="ユーザーIDが通報リストに載っているか確認する")
-    @app_commands.describe(user_id="確認するユーザーID")
-    async def check(interaction: discord.Interaction, user_id: str) -> None:
-        await handle_check(interaction, user_id)
-
-    @tree.command(name="report", description="悪質なユーザーを通報する")
+    @tree.command(name="check", description="ユーザー/サーバー/Botが通報リストに載っているか確認する")
     @app_commands.describe(
-        user_id="通報するユーザーID",
+        target_type="確認する対象の種類",
+        target_id="確認するID（ユーザーID / サーバーID / BotのユーザーID）",
+    )
+    async def check(
+        interaction: discord.Interaction,
+        target_type: TargetType,
+        target_id: str,
+    ) -> None:
+        await handle_check(interaction, target_type, target_id)
+
+    @tree.command(name="report", description="悪質なユーザー/サーバー/Botを通報する")
+    @app_commands.describe(
+        target_type="通報する対象の種類",
+        target_id="通報するID（ユーザーID / サーバーID / BotのユーザーID）",
         evidence_image="証拠画像（必須）",
         note="補足（任意）",
+        server_name="対象がサーバーの場合のサーバー名（サーバー通報時は必須。Botは対象サーバーに未参加のため自動取得できません）",
+        related_id="サーバーの場合は作成者のユーザーID、Botの場合は開発者のユーザーID（任意・分かる範囲で）",
     )
     async def report(
         interaction: discord.Interaction,
-        user_id: str,
+        target_type: TargetType,
+        target_id: str,
         evidence_image: discord.Attachment,
         note: Optional[str] = None,
+        server_name: Optional[str] = None,
+        related_id: Optional[str] = None,
     ) -> None:
         if not MAINTAINER_CHANNEL_ID:
             await interaction.response.send_message(
@@ -56,7 +74,16 @@ def setup_commands(bot: discord.Client) -> app_commands.CommandTree:
         channel = interaction.client.get_channel(int(MAINTAINER_CHANNEL_ID))
         if channel is None:
             channel = await interaction.client.fetch_channel(int(MAINTAINER_CHANNEL_ID))
-        await handle_report(interaction, user_id, evidence_image, note, channel)
+        await handle_report(
+            interaction,
+            target_type,
+            target_id,
+            evidence_image,
+            note,
+            server_name,
+            related_id,
+            channel,
+        )
 
     async def _sync_commands() -> None:
         if GUILD_ID:
@@ -68,11 +95,6 @@ def setup_commands(bot: discord.Client) -> app_commands.CommandTree:
             synced = await tree.sync()
             print(f"[commands] synced {len(synced)} command(s) globally")
 
-    # discord.Client（commands.Bot と違い add_listener を持たない）で
-    # bot/events.py 側の on_ready を上書きしないよう、既存のハンドラを
-    # 保持しつつ後ろに繋いだ新しい on_ready を再代入する。
-    # Client.dispatch() は毎回 getattr(self, "on_ready") を見に行くだけなので、
-    # デコレータ経由でなく直接代入しても同じように呼び出される。
     original_on_ready = getattr(bot, "on_ready", None)
 
     async def _on_ready() -> None:
