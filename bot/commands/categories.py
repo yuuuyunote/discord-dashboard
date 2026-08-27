@@ -7,6 +7,10 @@ design-memo.mdのカテゴリ体系表と一致させること。
 user/server/bot の3種はカテゴリ体系が異なるため、target_type別に
 テーブルを分けている。label_for は既存呼び出し（target_type省略）との
 互換のため user 扱いをデフォルトにしている。
+
+malicious-server-creator / malicious-bot-developer は、悪質サーバー/Bot通報の
+承認時に作成者/開発者IDをuser側へ自動登録する際に使うカテゴリ（bot/ui/report_flow.py
+のApprovalView.approve参照）。通常の/reportからも選択可能な通常カテゴリとして扱う。
 """
 
 USER_CATEGORY_LABELS = {
@@ -19,6 +23,8 @@ USER_CATEGORY_LABELS = {
     "doxxing": "個人情報の暴露",
     "hate-speech": "差別的言動",
     "bot-abuse": "bot悪用",
+    "malicious-server-creator": "悪質サーバーの作成者",
+    "malicious-bot-developer": "悪質Botの開発者",
     "other": "その他",
 }
 
