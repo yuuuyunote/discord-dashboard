@@ -5,20 +5,27 @@ Wispbyte用 Discord Bot のみ起動スクリプト
 """
 
 import asyncio
+import logging
 import os
 import glob
 from typing import Optional
 
 import discord
 
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+)
+logger = logging.getLogger(__name__)
+
 
 def _load_env():
     found = glob.glob("/home/**/.env", recursive=True) + glob.glob(".env")
-    print(f"[Bot] 見つかった.envファイル: {found}")
+    logger.info(f"見つかった.envファイル: {found}")
     paths = ["/home/container/.env", "/home/user/.env", ".env", "/app/.env"]
     for path in paths:
         exists = os.path.exists(path)
-        print(f"[Bot] パス確認: {path} → {'存在する' if exists else '存在しない'}")
+        logger.debug(f"パス確認: {path} → {'存在する' if exists else '存在しない'}")
         if exists:
             with open(path) as f:
                 for line in f:
@@ -29,9 +36,9 @@ def _load_env():
                     key = key.strip()
                     val = val.strip().strip('"').strip("'")
                     os.environ[key] = val
-            print(f"[Bot] .envを読み込みました: {path}")
+            logger.info(f".envを読み込みました: {path}")
             return
-    print("[Bot] .envファイルが見つかりませんでした")
+    logger.warning(".envファイルが見つかりませんでした")
 
 
 _load_env()
@@ -44,8 +51,8 @@ DISCORD_TOKEN = os.environ.get("DISCORD_TOKEN", "")
 GUILD_ID_STR  = os.environ.get("GUILD_ID", "0")
 GUILD_ID      = int(GUILD_ID_STR) if GUILD_ID_STR.strip().isdigit() else 0
 
-print(f"[Bot] GUILD_ID={GUILD_ID}")
-print(f"[Bot] TOKEN先頭6文字={DISCORD_TOKEN[:6] if DISCORD_TOKEN else 'なし'}")
+logger.info(f"GUILD_ID={GUILD_ID}")
+logger.debug(f"TOKEN先頭6文字={DISCORD_TOKEN[:6] if DISCORD_TOKEN else 'なし'}")
 
 intents = discord.Intents.default()
 intents.members         = True
@@ -70,7 +77,7 @@ async def _import_existing_members(guild: discord.Guild) -> None:
     メンバー情報はメモリ上に集めるだけにし、DB書き込みは1回のバルクINSERTに
     まとめ、それも asyncio.to_thread() で別スレッドに逃がしている。
     """
-    print("[Bot] 既存メンバーのインポートを開始...")
+    logger.info("既存メンバーのインポートを開始...")
 
     rows: list[tuple[str, str, str, Optional[str]]] = []
     skip = 0
@@ -89,7 +96,7 @@ async def _import_existing_members(guild: discord.Guild) -> None:
     inserted = await asyncio.to_thread(database.insert_new_users_bulk, rows)
     skip += len(rows) - inserted
 
-    print(f"[Bot] インポート完了: 新規登録 {inserted} 人 / スキップ {skip} 件")
+    logger.info(f"インポート完了: 新規登録 {inserted} 人 / スキップ {skip} 件")
 
 
 async def _sync_commands() -> None:
@@ -98,24 +105,24 @@ async def _sync_commands() -> None:
         guild  = discord.Object(id=GUILD_ID)
         tree.copy_global_to(guild=guild)
         synced = await tree.sync(guild=guild)
-        print(f"[Bot] スラッシュコマンド同期完了: {len(synced)}件")
+        logger.info(f"スラッシュコマンド同期完了: {len(synced)}件")
     except Exception as e:
-        print(f"[Bot] スラッシュコマンド同期エラー: {e}")
+        logger.error(f"スラッシュコマンド同期エラー: {e}", exc_info=True)
 
 
 async def _on_ready_tasks() -> None:
     await bot.wait_until_ready()
     guild = bot.get_guild(GUILD_ID)
     if guild:
-        print(f"[Bot] ギルド取得成功: {guild.name}")
+        logger.info(f"ギルド取得成功: {guild.name}")
         await _import_existing_members(guild)
     else:
-        print(f"[Bot] ギルド取得失敗: GUILD_ID={GUILD_ID}")
+        logger.error(f"ギルド取得失敗: GUILD_ID={GUILD_ID}")
 
 
 async def main() -> None:
     database.init_db()
-    print("[Bot] DB初期化完了")
+    logger.info("DB初期化完了")
 
     async with bot:
         bot.loop.create_task(_sync_commands())
