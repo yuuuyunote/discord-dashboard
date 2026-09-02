@@ -8,44 +8,24 @@ Discordサーバーの既存メンバーを全員DBに一括登録するスク�
 """
 
 import asyncio
+import logging
 import os
-from datetime import timezone
 
 import discord
 from dotenv import load_dotenv
 
+from database import upsert_user
+
 load_dotenv()
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+)
+logger = logging.getLogger(__name__)
 
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN", "")
 GUILD_ID      = int(os.getenv("GUILD_ID", "0"))
-
-# DB接続（database.pyと同じ）
-import psycopg2
-import psycopg2.extras
-
-DATABASE_URL = os.getenv("DATABASE_URL", "")
-
-
-def get_conn():
-    return psycopg2.connect(DATABASE_URL, cursor_factory=psycopg2.extras.RealDictCursor)
-
-
-def upsert_user(user_id: str, username: str, account_created: str, joined_at: str = None):
-    from datetime import datetime, timezone
-    now = datetime.now(timezone.utc).isoformat()
-    conn = get_conn()
-    try:
-        with conn.cursor() as cur:
-            cur.execute("""
-                INSERT INTO users (user_id, username, account_created, joined_at, updated_at)
-                VALUES (%s, %s, %s, %s, %s)
-                ON CONFLICT(user_id) DO UPDATE SET
-                    username   = EXCLUDED.username,
-                    updated_at = EXCLUDED.updated_at
-            """, (user_id, username, account_created, joined_at, now))
-        conn.commit()
-    finally:
-        conn.close()
 
 
 # ─────────────────────────────────────────────────────────
@@ -60,16 +40,16 @@ bot = discord.Client(intents=intents)
 
 @bot.event
 async def on_ready():
-    print(f"[Import] ログイン成功: {bot.user}")
+    logger.info(f"ログイン成功: {bot.user}")
 
     guild = bot.get_guild(GUILD_ID)
     if guild is None:
-        print(f"[Import] エラー: GUILD_ID={GUILD_ID} のサーバーが見つかりません")
+        logger.error(f"GUILD_ID={GUILD_ID} のサーバーが見つかりません")
         await bot.close()
         return
 
-    print(f"[Import] サーバー: {guild.name} | メンバー数: {guild.member_count}")
-    print("[Import] メンバーの取得を開始します...")
+    logger.info(f"サーバー: {guild.name} | メンバー数: {guild.member_count}")
+    logger.info("メンバーの取得を開始します...")
 
     count     = 0
     skip      = 0
@@ -90,16 +70,16 @@ async def on_ready():
             count += 1
 
             if count % 100 == 0:
-                print(f"[Import] 進捗: {count} 人登録済み...")
+                logger.info(f"進捗: {count} 人登録済み...")
 
         except Exception as e:
-            print(f"[Import] エラー: {member} → {e}")
+            logger.error(f"エラー: {member} → {e}", exc_info=True)
             error += 1
 
-    print(f"\n[Import] 完了！")
-    print(f"  登録: {count} 人")
-    print(f"  スキップ（Bot）: {skip} 件")
-    print(f"  エラー: {error} 件")
+    logger.info("完了！")
+    logger.info(f"  登録: {count} 人")
+    logger.info(f"  スキップ（Bot）: {skip} 件")
+    logger.info(f"  エラー: {error} 件")
 
     await bot.close()
 
