@@ -3,16 +3,19 @@ routers/auth.py
 Discord OAuth2 ログイン・コールバック・ログアウト処理
 """
 
+import logging
 import os
 import hashlib
 import hmac
 import json
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 
 import httpx
 from fastapi import APIRouter, Request, Response
 from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
+
+logger = logging.getLogger(__name__)
 
 # main.py から注入される
 templates: Jinja2Templates = None  # type: ignore
@@ -167,7 +170,7 @@ async def auth_callback(request: Request, code: str = "", error: str = ""):
             headers={"Content-Type": "application/x-www-form-urlencoded"},
         )
         if token_res.status_code != 200:
-            print(f"[Auth] token交換失敗 status={token_res.status_code} body={token_res.text}")
+            logger.error(f"token交換失敗 status={token_res.status_code} body={token_res.text}")
             return RedirectResponse("/login?error=token_failed")
 
         token_data   = token_res.json()
