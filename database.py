@@ -320,9 +320,6 @@ def update_invite_activity(code: str, messages: int, vc_sec: int) -> None:
         (messages, vc_sec, code)
     )
 
-def get_invite(code: str) -> Optional[dict]:
-    rows = _execute("SELECT * FROM invites WHERE code=%s", (code,))
-    return rows[0] if rows else None
 
 
 # ─────────────────────────────────────────────────────────
@@ -419,15 +416,6 @@ def get_join_log_by_user(user_id: str) -> Optional[dict]:
     )
     return rows[0] if rows else None
 
-def get_join_logs_by_invite(invite_code: str) -> list[dict]:
-    """招待コード別のユーザー一覧"""
-    return _execute("""
-        SELECT jl.*, u.username
-        FROM join_logs jl
-        LEFT JOIN users u ON u.user_id = jl.user_id
-        WHERE jl.invite_code = %s
-        ORDER BY jl.joined_at DESC
-    """, (invite_code,))
 
 
 # ─────────────────────────────────────────────────────────
@@ -548,60 +536,6 @@ def update_retention_check(user_id: str, check_7d: Optional[bool], check_30d: Op
             "UPDATE retention_checks SET check_30d=%s, checked_at=%s WHERE user_id=%s",
             (check_30d, now, user_id)
         )
-
-def get_retention_stats_by_invite() -> list[dict]:
-    """招待コード別の定着率を返す"""
-    return _execute("""
-        SELECT
-            invite_code,
-            COUNT(*) AS total,
-            COUNT(CASE WHEN check_7d = TRUE THEN 1 END) AS retained_7d,
-            COUNT(CASE WHEN check_30d = TRUE THEN 1 END) AS retained_30d,
-            ROUND(COUNT(CASE WHEN check_7d = TRUE THEN 1 END)::NUMERIC / NULLIF(COUNT(*),0) * 100, 1) AS rate_7d,
-            ROUND(COUNT(CASE WHEN check_30d = TRUE THEN 1 END)::NUMERIC / NULLIF(COUNT(*),0) * 100, 1) AS rate_30d
-        FROM retention_checks
-        WHERE check_7d IS NOT NULL
-        GROUP BY invite_code
-        ORDER BY rate_7d DESC
-    """)
-
-
-def delete_punishment(punishment_id: int) -> None:
-    _execute("DELETE FROM punishments WHERE id=%s", (punishment_id,))
-
-
-# ─────────────────────────────────────────────────────────
-# 処罰履歴フィルター検索
-# ─────────────────────────────────────────────────────────
-
-def get_punishment_filtered(
-    punishment_type: str = "",
-    executor: str = "",
-    days: int = 0,
-    limit: int = 50
-) -> list[dict]:
-    """処罰履歴フィルター検索（機能46）"""
-    conditions = []
-    args = []
-
-    if punishment_type:
-        conditions.append("punishment_type = %s")
-        args.append(punishment_type)
-    if executor:
-        conditions.append("executor ILIKE %s")
-        args.append(f"%{executor}%")
-    if days > 0:
-        conditions.append(f"executed_at >= (NOW() - INTERVAL '{days} days')::TEXT")
-
-    where = "WHERE " + " AND ".join(conditions) if conditions else ""
-    args.append(limit)
-
-    return _execute(f"""
-        SELECT * FROM punishments
-        {where}
-        ORDER BY executed_at DESC
-        LIMIT %s
-    """, tuple(args))
 
 
 # ─────────────────────────────────────────────────────────
