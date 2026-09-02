@@ -29,7 +29,6 @@ CLIENT_SECRET = os.getenv("DISCORD_CLIENT_SECRET", "")
 REDIRECT_URI  = os.getenv("REDIRECT_URI", "http://localhost:8000/auth/callback")
 SECRET_KEY    = os.getenv("SECRET_KEY", "changeme").encode()
 GUILD_ID      = os.getenv("GUILD_ID", "")
-MOD_ROLE_ID   = os.getenv("MOD_ROLE_ID", "")
 ADMIN_ROLE_ID = os.getenv("ADMIN_ROLE_ID", "")
 
 DISCORD_API   = "https://discord.com/api/v10"
@@ -118,19 +117,11 @@ async def login_head():
     return Response(status_code=200)
 
 
-@router.get("/", include_in_schema=False)
-async def root(request: Request):
-    session = get_session(request)
-    if session:
-        return RedirectResponse("/analytics")
-    return RedirectResponse("/login")
-
-
 @router.get("/login", include_in_schema=False)
 async def login_page(request: Request):
     session = get_session(request)
     if session:
-        return RedirectResponse("/analytics")
+        return RedirectResponse("/admin/bulk-dm")
     return templates.TemplateResponse("login.html", {"request": request})
 
 
@@ -202,18 +193,13 @@ async def auth_callback(request: Request, code: str = "", error: str = ""):
         member_data = member_res.json()
         roles = member_data.get("roles", [])
 
-        # 4. 運営ロール所持チェック
-        if MOD_ROLE_ID not in roles:
-            return RedirectResponse("/login?error=no_permission")
-
-        # 4.5. 管理者ロール（一斉DM等の上位機能用）の所持判定。
-        #      ここで取得済みのroles一覧を使って一度だけ判定し、結果をセッションに
-        #      キャッシュする。以前はapi.py側がリクエストのたびにBotトークンで
-        #      Discord REST APIを再度叩いて判定していたため、アクセス集中時に
-        #      レート制限(429)へ引っかかり、判定失敗が誤って「権限なし」として
-        #      扱われ403になる不具合があった。ログイン時の情報を使い回すことで
-        #      その冗長なAPI呼び出し自体をなくす。
+        # 4. 管理者ロール所持チェック。この管理ダッシュボードはDM送信・スレッド
+        #    キープアライブ等の管理者専用機能しか持たないため、ログインできる
+        #    のは管理者ロール保持者のみに限定する（統計ページはログイン不要で
+        #    公開済みのため、ここを通過する必要がない）。
         is_admin = bool(ADMIN_ROLE_ID) and ADMIN_ROLE_ID in roles
+        if not is_admin:
+            return RedirectResponse("/login?error=no_permission")
 
     # 5. セッション発行
     session_payload = {
@@ -224,7 +210,7 @@ async def auth_callback(request: Request, code: str = "", error: str = ""):
         "logged_in": datetime.now(timezone.utc).isoformat(),
     }
 
-    response = RedirectResponse("/analytics", status_code=302)
+    response = RedirectResponse("/admin/bulk-dm", status_code=302)
     set_session(response, session_payload)
     return response
 
