@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="ja" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>一斉DM送信 — Dashboard</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+</head>
+<body>
+  <nav class="nav-top">
+    <span class="nav-top-logo"><i class="fa-solid fa-terminal"></i> Guide Base + / Dashboard</span>
+    <label class="theme-toggle" title="テーマ切替">
+      <input type="checkbox" id="themeChk">
+      <span class="theme-toggle-track"></span>
+      <span class="theme-toggle-thumb"><span id="themeIcon">☀️</span></span>
+    </label>
+    <div class="nav-top-user">
+      {% if session.avatar %}
+      <div class="nav-top-avatar">
+        <img src="https://cdn.discordapp.com/avatars/{{ session.user_id }}/{{ session.avatar }}.png" alt="">
+      </div>
+      {% endif %}
+      {{ session.username }}
+      <a href="/logout" style="color:var(--text-sub); font-size:12px; margin-left:8px;"><i class="fa-solid fa-right-from-bracket"></i></a>
+    </div>
+  </nav>
+  <div class="dash-layout">
+    <aside class="sidebar">
+      <div class="sidebar-label">Navigation</div>
+      <nav class="sidebar-nav">
+        <a href="/"><i class="fa-solid fa-chart-pie"></i> 統計</a>
+        <a href="/admin/bulk-dm" class="active"><i class="fa-solid fa-user-shield"></i> 運営ツール</a>
+      </nav>
+    </aside>
+    <main class="main-content">
+      <div class="page-header fade-up">
+        <div class="page-header-label">Staff Only</div>
+        <h1>一斉DM送信</h1>
+        <p>指定したユーザーIDへ、同じ文面のDMをまとめて送信します</p>
+      </div>
+
+      <div class="card fade-up card-inner">
+        <div class="section-head"><h2>宛先ユーザーID</h2><span class="mono">1行に1件</span></div>
+        <textarea id="recipientsInput" class="note-textarea" style="min-height:140px;" placeholder="123456789012345678&#10;234567890123456789&#10;（# で始まる行はコメントとして無視されます）"></textarea>
+
+        <div class="section-head" style="margin-top:24px;"><h2>本文</h2></div>
+        <textarea id="messageInput" class="warn-textarea" style="min-height:200px;" placeholder="こんにちは、Guide Base +運営のゆううゆです。&#10;運営募集にご応募いただきありがとうございます。&#10;..."></textarea>
+
+        <div style="display:flex; align-items:center; gap:12px; margin-top:18px;">
+          <button id="sendBtn" class="btn btn-primary"><i class="fa-solid fa-paper-plane"></i> 送信する</button>
+          <span id="recipientCount" class="mono" style="font-size:12px; color:var(--text-sub);"></span>
+        </div>
+        <p style="font-size:11px; color:var(--text-faint); margin-top:10px;">
+          レート制限対策のため、1件ごとに約1.2秒の間隔を空けて送信します。件数が多いと完了まで時間がかかります。
+        </p>
+      </div>
+
+      <div class="card fade-up" id="resultsCard" style="display:none; margin-top:16px;">
+        <div class="card-inner">
+          <div class="section-head"><h2>送信結果</h2><span id="resultSummary" class="mono"></span></div>
+          <div style="overflow-x:auto;">
+            <table class="data-table">
+              <thead>
+                <tr><th>ユーザーID</th><th>名前</th><th>結果</th><th>詳細</th></tr>
+              </thead>
+              <tbody id="resultsBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div class="card fade-up" style="margin-top:16px;">
+        <div class="card-inner">
+          <div class="section-head">
+            <h2>個別対応</h2>
+            <button id="refreshThreadsBtn" class="btn btn-outline" style="padding:5px 12px; font-size:12px;">
+              <i class="fa-solid fa-rotate"></i> 更新
+            </button>
+          </div>
+          <p style="font-size:12px; color:var(--text-sub); margin-bottom:14px;">
+            送信した相手から返信があると、ここに一覧表示されます。クリックするとチャット形式でやりとりできます。
+          </p>
+          <div class="thread-list" id="threadList">
+            <p style="color:var(--text-faint); text-align:center; padding:20px 0;">読み込み中...</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="card fade-up" style="margin-top:16px;">
+        <div class="card-inner">
+          <div class="section-head"><h2>フォーラムスレッド キープアライブ</h2></div>
+          <p style="font-size:12px; color:var(--text-sub); margin-bottom:14px;">
+            登録した各スレッドに一定間隔で「.」を送信し、約1秒後に自動削除します。スレッドは複数登録できます。
+          </p>
+
+          <div style="display:flex; align-items:center; gap:10px; margin-bottom:18px;">
+            <div>
+              <div class="filter-label" style="margin-bottom:4px;">送信間隔（分・全スレッド共通）</div>
+              <input type="number" id="keepaliveIntervalInput" class="filter-input" style="max-width:120px;" min="1"
+                     placeholder="60" value="{{ keepalive_interval_min }}">
+            </div>
+            <button id="keepaliveIntervalSaveBtn" class="btn btn-outline" style="align-self:flex-end;">
+              <i class="fa-solid fa-floppy-disk"></i> 間隔を保存
+            </button>
+          </div>
+
+          <div id="keepaliveThreadList" style="display:flex; flex-direction:column; gap:6px; margin-bottom:16px;">
+            {% for t in keepalive_threads %}
+            <div class="thread-item" data-thread-id="{{ t.thread_id }}" style="justify-content:space-between;">
+              <div class="thread-item-name">
+                {{ t.label or "（ラベルなし）" }} <span class="uid">{{ t.thread_id }}</span>
+              </div>
+              <button class="btn btn-outline keepalive-remove-btn" data-thread-id="{{ t.thread_id }}" style="padding:4px 10px; font-size:12px;">
+                <i class="fa-solid fa-trash"></i>
+              </button>
+            </div>
+            {% else %}
+            <p style="color:var(--text-faint); text-align:center; padding:12px 0;" id="keepaliveEmptyMsg">まだスレッドが登録されていません</p>
+            {% endfor %}
+          </div>
+
+          <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+            <div>
+              <div class="filter-label" style="margin-bottom:4px;">ラベル（任意）</div>
+              <input type="text" id="keepaliveLabelInput" class="filter-input" style="max-width:180px;" placeholder="例：質問スレ">
+            </div>
+            <div>
+              <div class="filter-label" style="margin-bottom:4px;">スレッドID</div>
+              <input type="text" id="keepaliveThreadInput" class="filter-input" style="max-width:220px;" placeholder="スレッドID（数字）">
+            </div>
+            <button id="keepaliveAddBtn" class="btn btn-primary" style="align-self:flex-end;">
+              <i class="fa-solid fa-plus"></i> 追加
+            </button>
+          </div>
+        </div>
+      </div>
+
+    </main>
+  </div>
+  <div id="toast" class="toast"></div>
+
+  <script>
+    // テーマ
+    const chk  = document.getElementById('themeChk');
+    const icon = document.getElementById('themeIcon');
+    const saved = localStorage.getItem('theme') || 'dark';
+    document.documentElement.setAttribute('data-theme', saved);
+    chk.checked = saved === 'light';
+    icon.textContent = saved === 'light' ? '🌙' : '☀️';
+    chk.addEventListener('change', () => {
+      const t = chk.checked ? 'light' : 'dark';
+      document.documentElement.setAttribute('data-theme', t);
+      localStorage.setItem('theme', t);
+      icon.textContent = t === 'light' ? '🌙' : '☀️';
+    });
+
+    function showToast(msg, ok = true) {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.style.background = ok ? 'var(--accent)' : 'var(--danger)';
+      t.classList.add('show');
+      setTimeout(() => t.classList.remove('show'), 2500);
+    }
+
+    function parseRecipients() {
+      const raw = document.getElementById('recipientsInput').value;
+      const ids = [];
+      raw.split('\n').forEach(line => {
+        line = line.trim();
+        if (!line || line.startsWith('#')) return;
+        if (/^\d+$/.test(line)) ids.push(line);
+      });
+      return [...new Set(ids)];
+    }
+
+    const recipientsInput = document.getElementById('recipientsInput');
+    const recipientCountEl = document.getElementById('recipientCount');
+    function updateCount() {
+      const n = parseRecipients().length;
+      recipientCountEl.textContent = n > 0 ? `宛先 ${n} 件` : '';
+    }
+    recipientsInput.addEventListener('input', updateCount);
+    updateCount();
+
+    document.getElementById('sendBtn').addEventListener('click', async () => {
+      const ids = parseRecipients();
+      const message = document.getElementById('messageInput').value.trim();
+
+      if (ids.length === 0) { showToast('宛先が0件です', false); return; }
+      if (!message) { showToast('本文が空です', false); return; }
+
+      const ok = confirm(`${ids.length} 件へ送信します。よろしいですか？\n\n（送信するとキャンセルできません）`);
+      if (!ok) return;
+
+      const btn = document.getElementById('sendBtn');
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> 送信中...';
+
+      try {
+        const fd = new FormData();
+        fd.append('recipients', ids.join('\n'));
+        fd.append('message', message);
+
+        const res = await fetch('/api/bulk-dm/send', { method: 'POST', body: fd });
+        const data = await res.json();
+
+        if (!data.ok) {
+          showToast('送信に失敗しました: ' + (data.error || ''), false);
+          return;
+        }
+
+        showToast(`送信完了: 成功 ${data.success_count} / 失敗 ${data.failed_count}`, data.failed_count === 0);
+
+        const resultsCard = document.getElementById('resultsCard');
+        const body = document.getElementById('resultsBody');
+        body.innerHTML = '';
+        data.results.forEach(r => {
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td class="mono">${r.user_id}</td>
+            <td>${r.name || '—'}</td>
+            <td>${r.ok ? '<span class="badge badge-green">成功</span>' : '<span class="badge badge-red">失敗</span>'}</td>
+            <td style="color:var(--text-sub); font-size:12px;">${r.reason || '—'}</td>
+          `;
+          body.appendChild(tr);
+        });
+        document.getElementById('resultSummary').textContent = `成功 ${data.success_count} / 失敗 ${data.failed_count}`;
+        resultsCard.style.display = 'block';
+
+      } catch (e) {
+        showToast('通信エラー', false);
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-paper-plane"></i> 送信する';
+      }
+    });
+
+    // ─── 個別対応スレッド一覧 ───────────────────────────────
+    function formatJst(isoStr) {
+      try {
+        const d = new Date(isoStr);
+        return d.toLocaleString('ja-JP', {
+          timeZone: 'Asia/Tokyo',
+          year: 'numeric', month: '2-digit', day: '2-digit',
+          hour: '2-digit', minute: '2-digit',
+        });
+      } catch (e) {
+        return isoStr;
+      }
+    }
+
+    function escapeHtml(s) {
+      const div = document.createElement('div');
+      div.textContent = s;
+      return div.innerHTML;
+    }
+
+    async function loadThreads() {
+      const list = document.getElementById('threadList');
+      try {
+        const res = await fetch('/api/dm-threads');
+        const data = await res.json();
+        if (!data.ok) {
+          list.innerHTML = '<p style="color:var(--danger); text-align:center; padding:20px 0;">読み込みに失敗しました</p>';
+          return;
+        }
+        if (data.threads.length === 0) {
+          list.innerHTML = '<p style="color:var(--text-faint); text-align:center; padding:20px 0;">まだやりとりはありません</p>';
+          return;
+        }
+        list.innerHTML = '';
+        data.threads.forEach(t => {
+          const a = document.createElement('a');
+          a.className = 'thread-item';
+          a.href = `/admin/dm-thread?user_id=${t.user_id}`;
+          const badge = t.status === 'handled'
+            ? '<span class="badge badge-gray">対応済み</span>'
+            : '<span class="badge badge-green">未対応</span>';
+          a.innerHTML = `
+            <div class="thread-item-name">
+              ${escapeHtml(t.username)} <span class="uid">${t.user_id}</span>
+            </div>
+            ${badge}
+            <span class="thread-item-time">${formatJst(t.last_message_at)}</span>
+          `;
+          list.appendChild(a);
+        });
+      } catch (e) {
+        list.innerHTML = '<p style="color:var(--danger); text-align:center; padding:20px 0;">通信エラー</p>';
+      }
+    }
+
+    document.getElementById('refreshThreadsBtn').addEventListener('click', loadThreads);
+    loadThreads();
+
+    // ─── フォーラムスレッド キープアライブ設定 ───────────────
+    document.getElementById('keepaliveIntervalSaveBtn').addEventListener('click', async () => {
+      const intervalMin = document.getElementById('keepaliveIntervalInput').value.trim();
+
+      if (!/^\d+$/.test(intervalMin) || parseInt(intervalMin, 10) < 1) {
+        showToast('送信間隔は1分以上の数字で入力してください', false);
+        return;
+      }
+
+      try {
+        const fd = new FormData();
+        fd.append('interval_min', intervalMin);
+        const res = await fetch('/api/keepalive-interval', { method: 'POST', body: fd });
+        const data = await res.json();
+        if (data.ok) {
+          showToast('間隔を保存しました');
+        } else {
+          showToast('保存に失敗しました: ' + (data.error || ''), false);
+        }
+      } catch (e) {
+        showToast('通信エラー', false);
+      }
+    });
+
+    document.getElementById('keepaliveAddBtn').addEventListener('click', async () => {
+      const threadId = document.getElementById('keepaliveThreadInput').value.trim();
+      const label    = document.getElementById('keepaliveLabelInput').value.trim();
+
+      if (!/^\d+$/.test(threadId)) {
+        showToast('スレッドIDは数字のみで入力してください', false);
+        return;
+      }
+
+      try {
+        const fd = new FormData();
+        fd.append('thread_id', threadId);
+        fd.append('label', label);
+        const res = await fetch('/api/keepalive-thread/add', { method: 'POST', body: fd });
+        const data = await res.json();
+        if (data.ok) {
+          showToast('スレッドを追加しました');
+          location.reload();
+        } else {
+          showToast('追加に失敗しました: ' + (data.error || ''), false);
+        }
+      } catch (e) {
+        showToast('通信エラー', false);
+      }
+    });
+
+    document.getElementById('keepaliveThreadList').addEventListener('click', async (e) => {
+      const btn = e.target.closest('.keepalive-remove-btn');
+      if (!btn) return;
+
+      const threadId = btn.dataset.threadId;
+      if (!confirm('このスレッドをキープアライブ対象から外しますか？')) return;
+
+      try {
+        const fd = new FormData();
+        fd.append('thread_id', threadId);
+        const res = await fetch('/api/keepalive-thread/remove', { method: 'POST', body: fd });
+        const data = await res.json();
+        if (data.ok) {
+          showToast('削除しました');
+          location.reload();
+        } else {
+          showToast('削除に失敗しました', false);
+        }
+      } catch (e) {
+        showToast('通信エラー', false);
+      }
+    });
+  </script>
+</body>
+</html>
