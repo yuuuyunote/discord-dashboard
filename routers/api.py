@@ -1,7 +1,7 @@
 """
 routers/api.py
-残す機能：分析（新規ユーザー分析・退室理由）、招待リンク別定着率レポート、
-招待リンク詳細（即抜け率）、処罰履歴、一斉DM・個別チャット対応
+残す機能：統計（即抜け率・退室理由の内訳、ログイン不要で公開）、
+一斉DM・個別チャット対応・フォーラムスレッドキープアライブ（管理者ロール限定）
 """
 
 import logging
@@ -23,18 +23,10 @@ templates: Jinja2Templates = None
 
 router = APIRouter()
 
-MOD_ROLE_ID   = os.getenv("MOD_ROLE_ID", "0")
 ADMIN_ROLE_ID = os.getenv("ADMIN_ROLE_ID", "0")
 
 if not ADMIN_ROLE_ID or ADMIN_ROLE_ID == "0":
     logger.warning("環境変数 ADMIN_ROLE_ID が未設定です。管理者専用機能（一斉DM等）は誰もログインできません。")
-
-
-def _check_auth(request: Request):
-    session = get_session(request)
-    if not session:
-        return RedirectResponse("/login")
-    return session
 
 
 async def _check_admin(request: Request):
@@ -51,9 +43,9 @@ async def _check_admin(request: Request):
     有効なため、ログイン中に管理者ロールを剥奪しても、そのユーザーはセッション有効期限が
     切れる（または再ログインする）までは管理者機能にアクセスできてしまう。
     """
-    result = _check_auth(request)
-    if isinstance(result, RedirectResponse):
-        return result
+    result = get_session(request)
+    if not result:
+        return RedirectResponse("/login")
     session = result
     if not session.get("is_admin", False):
         logger.warning(f"管理者ロール判定NG: user_id={session.get('user_id', '')} はセッション上 is_admin=False です（要再ログイン、または ADMIN_ROLE_ID 未設定の可能性）")
@@ -65,68 +57,23 @@ async def _check_admin(request: Request):
 # ページルート
 # ─────────────────────────────────────────────────────────
 
-@router.get("/invite/{code}", include_in_schema=False)
-async def invite_detail_page(request: Request, code: str):
-    """招待リンク別ユーザー一覧・即抜け率ページ"""
-    result = _check_auth(request)
-    if isinstance(result, RedirectResponse):
-        return result
-    session = result
+# ─────────────────────────────────────────────────────────
+# ページルート
+# ─────────────────────────────────────────────────────────
 
-    invite  = database.get_invite(code)
-    members = database.get_join_logs_by_invite(code)
+@router.get("/", include_in_schema=False)
+async def stats_page(request: Request):
+    """統計ページ（即抜け率・退室理由の内訳）。ログイン不要で誰でも閲覧できる。"""
+    session = get_session(request)
 
-    # 即抜け判定フラグを付加
-    for m in members:
-        if m.get("left_at") and m.get("joined_at"):
-            joined = datetime.fromisoformat(m["joined_at"])
-            left   = datetime.fromisoformat(m["left_at"])
-            m["instant_leave"] = (left - joined).total_seconds() < 86400
-        else:
-            m["instant_leave"] = False
-
-    return templates.TemplateResponse("invite_detail.html", {
-        "request": request,
-        "session": session,
-        "invite":  invite,
-        "members": members,
-        "code":    code,
-    })
-
-
-@router.get("/retention", include_in_schema=False)
-async def retention_page(request: Request):
-    """招待リンク別定着率レポート"""
-    result = _check_auth(request)
-    if isinstance(result, RedirectResponse):
-        return result
-    session = result
-
-    stats = database.get_retention_stats_by_invite()
-
-    return templates.TemplateResponse("retention.html", {
-        "request": request,
-        "session": session,
-        "stats":   stats,
-    })
-
-
-@router.get("/analytics", include_in_schema=False)
-async def analytics_page(request: Request):
-    """分析ページ（新規ユーザー分析・退室理由の内訳）"""
-    result = _check_auth(request)
-    if isinstance(result, RedirectResponse):
-        return result
-    session = result
-
-    # 新規ユーザー分析
+    # 即抜け率
     new_stats_30 = database.get_new_user_stats(days=30)
     new_stats_7  = database.get_new_user_stats(days=7)
 
     # 退室理由統計
     leave_stats = database.get_leave_reason_stats()
 
-    return templates.TemplateResponse("analytics.html", {
+    return templates.TemplateResponse("stats.html", {
         "request":      request,
         "session":      session,
         "new_stats_30": new_stats_30,
@@ -135,41 +82,11 @@ async def analytics_page(request: Request):
     })
 
 
-@router.get("/punishments", include_in_schema=False)
-async def punishments_page(
-    request: Request,
-    type: str = "",
-    executor: str = "",
-    days: int = 0,
-):
-    """処罰履歴検索・フィルター画面"""
-    result = _check_auth(request)
-    if isinstance(result, RedirectResponse):
-        return result
-    session = result
-
-    punishments = database.get_punishment_filtered(
-        punishment_type=type,
-        executor=executor,
-        days=days,
-        limit=100,
-    )
-
-    return templates.TemplateResponse("punishments.html", {
-        "request":     request,
-        "session":     session,
-        "punishments": punishments,
-        "filter_type": type,
-        "filter_executor": executor,
-        "filter_days": days,
-    })
-
-
 @router.get("/error/403", include_in_schema=False)
 async def error_403(request: Request):
     return templates.TemplateResponse(
         "login.html",
-        {"request": request, "error": "アクセス権限がありません。運営ロールが必要です。"},
+        {"request": request, "error": "アクセス権限がありません。管理者ロールが必要です。"},
         status_code=403,
     )
 
@@ -177,20 +94,6 @@ async def error_403(request: Request):
 # ─────────────────────────────────────────────────────────
 # API エンドポイント
 # ─────────────────────────────────────────────────────────
-
-@router.post("/api/punishment/delete", include_in_schema=False)
-async def delete_punishment(
-    request: Request,
-    punishment_id: int = Form(...),
-):
-    """処罰記録を削除（誤検知対応）"""
-    result = _check_auth(request)
-    if isinstance(result, RedirectResponse):
-        return JSONResponse({"ok": False, "error": "unauthorized"}, status_code=401)
-
-    database.delete_punishment(punishment_id)
-    return JSONResponse({"ok": True})
-
 
 # ─────────────────────────────────────────────────────────
 # 一斉DM送信（管理者ロール限定・メニューには出さない）
