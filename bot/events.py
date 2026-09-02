@@ -1,7 +1,6 @@
 """
 bot/events.py
 全Botイベントハンドラ
-改善：Wick等外部Bot処罰の確実な検知
 改善：招待リンク検出のレースコンディション・API反映遅延対策
 """
 
@@ -319,89 +318,6 @@ def setup_events(bot: discord.Client) -> None:
     async def on_invite_delete(invite: discord.Invite) -> None:
         _invite_cache.pop(invite.code, None)
 
-    # ── Wickのwarn検知（メッセージembedから取得） ──────────
-    @bot.event
-    async def on_message_wick_warn(message: discord.Message) -> None:
-        """Wickのwarnメッセージを検知してDBに記録"""
-        if not message.author.bot:
-            return
-        if not isinstance(message.guild, discord.Guild):
-            return
-        if message.guild.id != GUILD_ID:
-            return
-        if not message.embeds:
-            return
-
-        # WickのBot IDリスト（主要なもの）
-        WICK_BOT_IDS = [
-            536991182035746816,   # Wick
-            493428086768041995,   # Wick (old)
-        ]
-        if message.author.id not in WICK_BOT_IDS:
-            return
-
-        for embed in message.embeds:
-            title = (embed.title or "").lower()
-            desc  = (embed.description or "").lower()
-
-            if "warn" not in title and "warn" not in desc:
-                continue
-
-            # ターゲットユーザーIDを取得
-            target_id   = None
-            target_name = "不明"
-
-            for field in embed.fields:
-                fname = field.name.lower()
-                if "user" in fname or "member" in fname or "target" in fname:
-                    val = field.value
-                    # <@12345> 形式からIDを抽出
-                    import re
-                    match = re.search(r'<@!?(\d+)>', val)
-                    if match:
-                        target_id   = match.group(1)
-                        target_name = val
-                    elif val.strip().isdigit():
-                        target_id = val.strip()
-
-            if target_id is None:
-                continue
-
-            # 対象がBotの場合は記録しない
-            target_user = message.guild.get_member(int(target_id))
-            if target_user is None:
-                try:
-                    target_user = await bot.fetch_user(int(target_id))
-                except Exception:
-                    target_user = None
-            if target_user is not None and getattr(target_user, 'bot', False):
-                continue
-
-            reason      = embed.description or ""
-            executed_at = _now_iso()
-            executor    = str(message.author)
-
-            # 重複チェック（10秒以内の同一ユーザーへのWARNはスキップ）
-            existing = database.get_punishments_by_user(target_id)
-            recent_warn = any(
-                p["punishment_type"] == "WARN" and
-                p["executor"] == executor and
-                (datetime.fromisoformat(executed_at) - datetime.fromisoformat(p["executed_at"])).total_seconds() < 10
-                for p in existing
-            )
-            if recent_warn:
-                continue
-
-            database.add_punishment(
-                user_id=target_id,
-                target_name=target_name,
-                punishment_type="WARN",
-                executor=executor,
-                reason=reason,
-                executed_at=executed_at,
-            )
-            logger.info(f"Wickwarn検知: 対象={target_name} | 理由={reason[:50]}")
-
 
 # ─────────────────────────────────────────────────────────
 # 発言ログのバッチ書き込み（1分ごと）
@@ -430,6 +346,8 @@ async def _activity_flusher(bot: discord.Client) -> None:
 
 # ─────────────────────────────────────────────────────────
 # 監査ログポーリング（60秒ごと）
+# BAN/KICKのみ検知し punishments テーブルへ記録する
+# （/stats の「退室理由の内訳」でKICK/BAN件数の集計に使われる）
 # ─────────────────────────────────────────────────────────
 
 async def _audit_log_poller(bot: discord.Client) -> None:
@@ -458,53 +376,9 @@ async def _audit_log_poller(bot: discord.Client) -> None:
                 if action == discord.AuditLogAction.ban:
                     punishment_type = "BAN"
 
-                # ── BAN解除 ───────────────────────────────
-                elif action == discord.AuditLogAction.unban:
-                    punishment_type = "UNBAN"
-
                 # ── KICK ─────────────────────────────────
                 elif action == discord.AuditLogAction.kick:
                     punishment_type = "KICK"
-
-                # ── TIMEOUT / TIMEOUT解除 ─────────────────
-                # (discord.pyにはAuditLogAction.automod_timeoutという属性は存在しない。
-                #  Wick等Bot経由のタイムアウトも、Discordネイティブのタイムアウトも、
-                #  すべてmember_updateのtimed_out_until変化として検出できる)
-                elif action == discord.AuditLogAction.member_update:
-                    is_timeout        = False
-                    is_timeout_remove = False
-                    try:
-                        after_changes  = entry.changes.after
-                        before_changes = entry.changes.before
-                        after_timeout  = getattr(after_changes,  'timed_out_until', None)
-                        before_timeout = getattr(before_changes, 'timed_out_until', None)
-
-                        if after_timeout is not None:
-                            if str(after_timeout) == "None" or after_timeout is None:
-                                is_timeout_remove = True
-                            else:
-                                is_timeout = True
-                        elif before_timeout is not None:
-                            is_timeout_remove = True
-                    except Exception:
-                        pass
-
-                    # 文字列チェックで補完
-                    if not is_timeout and not is_timeout_remove:
-                        try:
-                            changes_str = str(entry.changes)
-                            if 'timed_out_until' in changes_str or 'timeout' in changes_str.lower():
-                                if "'after': None" in changes_str or '"after": null' in changes_str:
-                                    is_timeout_remove = True
-                                else:
-                                    is_timeout = True
-                        except Exception:
-                            pass
-
-                    if not is_timeout and not is_timeout_remove:
-                        continue
-
-                    punishment_type = "TIMEOUT_REMOVE" if is_timeout_remove else "TIMEOUT"
 
                 else:
                     continue
@@ -531,21 +405,6 @@ async def _audit_log_poller(bot: discord.Client) -> None:
                     for p in existing
                 )
                 if already:
-                    continue
-
-                # TIMEOUT解除の場合：最新のTIMEOUTレコード1件のみ自動削除
-                if punishment_type == "TIMEOUT_REMOVE":
-                    # executed_atで降順ソートして最新のTIMEOUTを1件取得
-                    latest_timeout = next(
-                        (p for p in sorted(existing, key=lambda x: x["executed_at"], reverse=True)
-                         if p["punishment_type"] == "TIMEOUT"),
-                        None
-                    )
-                    if latest_timeout:
-                        database.delete_punishment(latest_timeout["id"])
-                        had_activity = True
-                        logger.info(f"最新のTIMEOUTを削除: id={latest_timeout['id']} | 対象: {target_name}")
-                    # TIMEOUT_REMOVEはDBに記録せず終了
                     continue
 
                 database.add_punishment(
