@@ -6,6 +6,7 @@ bot/events.py
 """
 
 import asyncio
+import logging
 import os
 from datetime import datetime, timezone, timedelta
 from typing import Optional
@@ -13,6 +14,8 @@ from typing import Optional
 import discord
 
 import database
+
+logger = logging.getLogger(__name__)
 
 GUILD_ID           = int(os.getenv("GUILD_ID", "0"))
 MOD_ROLE_ID        = int(os.getenv("MOD_ROLE_ID", "0"))
@@ -74,22 +77,22 @@ async def _handle_dm_reply(bot: discord.Client, message: discord.Message) -> Non
             # 相手から新着があったら「未対応」に戻す（既に対応済みにしていた場合も含む）
             database.upsert_dm_thread(user_id, str(message.author), now, status="unhandled")
     except Exception as e:
-        print(f"[Bot] DM返信の保存エラー: {e}")
+        logger.error(f"DM返信の保存エラー: {e}", exc_info=True)
         return
 
     if not inserted:
         # 同じメッセージが既に保存済み（デプロイ切替時の重複イベント等）。通知も出さない
         return
 
-    print(f"[Bot] DM返信受信: {message.author} ({user_id}) | {content[:50]}")
+    logger.info(f"DM返信受信: {message.author} ({user_id}) | {content[:50]}")
 
     if not DM_REPLY_CHANNEL_ID:
-        print("[Bot] DM返信通知NG: 環境変数 DM_REPLY_CHANNEL_ID が未設定（0）です")
+        logger.warning("DM返信通知NG: 環境変数 DM_REPLY_CHANNEL_ID が未設定（0）です")
         return
 
     channel = bot.get_channel(DM_REPLY_CHANNEL_ID)
     if channel is None:
-        print(f"[Bot] DM返信通知NG: DM_REPLY_CHANNEL_ID={DM_REPLY_CHANNEL_ID} のチャンネルが見つかりません"
+        logger.warning(f"DM返信通知NG: DM_REPLY_CHANNEL_ID={DM_REPLY_CHANNEL_ID} のチャンネルが見つかりません"
               f"（IDが誤っているか、Botがそのチャンネルを閲覧できない可能性があります）")
         return
 
@@ -108,7 +111,7 @@ async def _handle_dm_reply(bot: discord.Client, message: discord.Message) -> Non
             embed.set_author(name=str(message.author))
         await channel.send(embed=embed)
     except Exception as e:
-        print(f"[Bot] DM返信通知の送信エラー: {e}")
+        logger.error(f"DM返信通知の送信エラー: {e}", exc_info=True)
 
 
 async def _fetch_invite_cache(guild: discord.Guild) -> dict[str, int]:
@@ -158,15 +161,15 @@ def setup_events(bot: discord.Client) -> None:
     async def on_ready() -> None:
         global _invite_cache, _last_audit_check
 
-        print(f"[Bot] ログイン成功: {bot.user} (ID: {bot.user.id})")
+        logger.info(f"ログイン成功: {bot.user} (ID: {bot.user.id})")
 
         guild = bot.get_guild(GUILD_ID)
         if guild is None:
-            print(f"[Bot] 警告: GUILD_ID={GUILD_ID} のサーバーが見つかりません")
+            logger.warning(f"GUILD_ID={GUILD_ID} のサーバーが見つかりません")
             return
 
         _invite_cache = await _fetch_invite_cache(guild)
-        print(f"[Bot] 招待キャッシュ初期化: {len(_invite_cache)} 件")
+        logger.info(f"招待キャッシュ初期化: {len(_invite_cache)} 件")
 
         try:
             invites = await guild.invites()
@@ -175,14 +178,14 @@ def setup_events(bot: discord.Client) -> None:
                 created_at = inv.created_at.isoformat() if inv.created_at else _now_iso()
                 database.upsert_invite(inv.code, creator_id, created_at)
         except discord.Forbidden:
-            print("[Bot] 警告: 招待リンク取得権限がありません")
+            logger.warning("招待リンク取得権限がありません")
 
         _last_audit_check = _load_last_audit_check()
         bot.loop.create_task(_audit_log_poller(bot))
         bot.loop.create_task(_retention_checker(bot))
         bot.loop.create_task(_activity_flusher(bot))
         bot.loop.create_task(_thread_keepalive_pinger(bot))
-        print("[Bot] 全タスク起動完了")
+        logger.info("全タスク起動完了")
 
     @bot.event
     async def on_member_join(member: discord.Member) -> None:
@@ -205,7 +208,7 @@ def setup_events(bot: discord.Client) -> None:
         database.add_retention_check(str(member.id), used_code, joined_at)
         _user_invite_cache[str(member.id)] = used_code
 
-        print(f"[Bot] 入室: {member} | 招待コード: {used_code or '不明'}")
+        logger.info(f"入室: {member} | 招待コード: {used_code or '不明'}")
 
         async def _record_initial_roles() -> None:
             await asyncio.sleep(600)
@@ -215,9 +218,9 @@ def setup_events(bot: discord.Client) -> None:
                     return
                 role_names = [r.name for r in updated.roles if r.name != "@everyone"]
                 database.update_user_initial_roles(str(member.id), role_names)
-                print(f"[Bot] 初期ロール記録: {member} → {role_names}")
+                logger.info(f"初期ロール記録: {member} → {role_names}")
             except Exception as e:
-                print(f"[Bot] 初期ロール記録エラー: {e}")
+                logger.error(f"初期ロール記録エラー: {e}", exc_info=True)
 
         bot.loop.create_task(_record_initial_roles())
 
@@ -234,9 +237,9 @@ def setup_events(bot: discord.Client) -> None:
             left   = datetime.fromisoformat(left_at)
             if (left - joined).total_seconds() < 86400:
                 database.increment_invite_leave(log["invite_code"])
-                print(f"[Bot] 即抜け検知: {member} | コード: {log['invite_code']}")
+                logger.info(f"即抜け検知: {member} | コード: {log['invite_code']}")
 
-        print(f"[Bot] 退室: {member}")
+        logger.info(f"退室: {member}")
 
     @bot.event
     async def on_message(message: discord.Message) -> None:
@@ -280,9 +283,9 @@ def setup_events(bot: discord.Client) -> None:
                 if member and role and role not in member.roles:
                     await member.add_roles(role, reason="初回発言ロール自動付与")
                     database.record_first_message(user_id)
-                    print(f"[Bot] 初回発言ロール付与: {member} → {role.name}")
+                    logger.info(f"初回発言ロール付与: {member} → {role.name}")
             except Exception as e:
-                print(f"[Bot] 初回発言ロール付与エラー: {e}")
+                logger.error(f"初回発言ロール付与エラー: {e}", exc_info=True)
 
     @bot.event
     async def on_voice_state_update(
@@ -397,7 +400,7 @@ def setup_events(bot: discord.Client) -> None:
                 reason=reason,
                 executed_at=executed_at,
             )
-            print(f"[Bot] Wickwarn検知: 対象={target_name} | 理由={reason[:50]}")
+            logger.info(f"Wickwarn検知: 対象={target_name} | 理由={reason[:50]}")
 
 
 # ─────────────────────────────────────────────────────────
@@ -415,14 +418,14 @@ async def _activity_flusher(bot: discord.Client) -> None:
             try:
                 database.add_activity_logs_bulk(batch)
             except Exception as e:
-                print(f"[Bot] activity_logsフラッシュエラー: {e}")
+                logger.error(f"activity_logsフラッシュエラー: {e}", exc_info=True)
 
         if _invite_msg_buffer:
             counts, _invite_msg_buffer = _invite_msg_buffer, {}
             try:
                 database.bulk_increment_invite_messages(counts)
             except Exception as e:
-                print(f"[Bot] invite集計フラッシュエラー: {e}")
+                logger.error(f"invite集計フラッシュエラー: {e}", exc_info=True)
 
 
 # ─────────────────────────────────────────────────────────
@@ -541,7 +544,7 @@ async def _audit_log_poller(bot: discord.Client) -> None:
                     if latest_timeout:
                         database.delete_punishment(latest_timeout["id"])
                         had_activity = True
-                        print(f"[Bot] 最新のTIMEOUTを削除: id={latest_timeout['id']} | 対象: {target_name}")
+                        logger.info(f"最新のTIMEOUTを削除: id={latest_timeout['id']} | 対象: {target_name}")
                     # TIMEOUT_REMOVEはDBに記録せず終了
                     continue
 
@@ -561,8 +564,8 @@ async def _audit_log_poller(bot: discord.Client) -> None:
                     if member and any(r.id == MOD_ROLE_ID for r in member.roles):
                         database.increment_mod_audit(str(entry.user.id))
 
-                print(
-                    f"[Bot] 処罰検知: {punishment_type} | "
+                logger.info(
+                    f"処罰検知: {punishment_type} | "
                     f"対象: {target_name} | 実行者: {executor} | 理由: {reason[:30]}"
                 )
 
@@ -572,9 +575,9 @@ async def _audit_log_poller(bot: discord.Client) -> None:
                 _save_last_audit_check(_last_audit_check)
 
         except discord.Forbidden:
-            print("[Bot] 警告: 監査ログの読み取り権限がありません")
+            logger.warning("監査ログの読み取り権限がありません")
         except Exception as e:
-            print(f"[Bot] 監査ログポーリングエラー: {e}")
+            logger.error(f"監査ログポーリングエラー: {e}", exc_info=True)
 
 
 # ─────────────────────────────────────────────────────────
@@ -617,7 +620,7 @@ async def _thread_keepalive_pinger(bot: discord.Client) -> None:
                 thread_id, now.isoformat(), cutoff.isoformat()
             )
             if not claimed:
-                print(f"[Bot] キープアライブスキップ: スレッド(ID={thread_id})は直近に送信済みのためスキップ")
+                logger.debug(f"キープアライブスキップ: スレッド(ID={thread_id})は直近に送信済みのためスキップ")
                 continue
 
             try:
@@ -625,19 +628,19 @@ async def _thread_keepalive_pinger(bot: discord.Client) -> None:
                 if thread is None:
                     thread = await bot.fetch_channel(int(thread_id))
             except (discord.NotFound, discord.Forbidden) as e:
-                print(f"[Bot] キープアライブNG: スレッド(ID={thread_id})が見つからないか閲覧できません: {e}")
+                logger.warning(f"キープアライブNG: スレッド(ID={thread_id})が見つからないか閲覧できません: {e}")
                 continue
             except Exception as e:
-                print(f"[Bot] キープアライブNG: スレッド取得エラー: {e}")
+                logger.error(f"キープアライブNG: スレッド取得エラー: {e}", exc_info=True)
                 continue
 
             try:
                 sent = await thread.send(THREAD_KEEPALIVE_MESSAGE)
                 await asyncio.sleep(1)
                 await sent.delete()
-                print(f"[Bot] キープアライブ送信完了: スレッド(ID={thread_id})")
+                logger.info(f"キープアライブ送信完了: スレッド(ID={thread_id})")
             except Exception as e:
-                print(f"[Bot] キープアライブNG: 送信・削除エラー: {e}")
+                logger.error(f"キープアライブNG: 送信・削除エラー: {e}", exc_info=True)
 
             # 複数スレッドを一気に叩かないよう、間に少し間隔を空ける
             if i < len(threads) - 1:
@@ -679,4 +682,4 @@ async def _retention_checker(bot: discord.Client) -> None:
                     database.update_retention_check(user_id, check_7d, check_30d)
 
         except Exception as e:
-            print(f"[Bot] 定着率チェックエラー: {e}")
+            logger.error(f"定着率チェックエラー: {e}", exc_info=True)
