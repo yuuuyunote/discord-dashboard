@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="ja" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <title>統計 — Community Dashboard</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+</head>
+<body>
+  <nav class="nav-top">
+    <span class="nav-top-logo"><i class="fa-solid fa-terminal"></i> Guide Base + / Dashboard</span>
+    <label class="theme-toggle" title="テーマ切替">
+      <input type="checkbox" id="themeChk">
+      <span class="theme-toggle-track"></span>
+      <span class="theme-toggle-thumb"><span id="themeIcon">☀️</span></span>
+    </label>
+    <div class="nav-top-user">
+      {% if session %}
+        {% if session.avatar %}
+        <div class="nav-top-avatar">
+          <img src="https://cdn.discordapp.com/avatars/{{ session.user_id }}/{{ session.avatar }}.png" alt="">
+        </div>
+        {% endif %}
+        {{ session.username }}
+        <a href="/logout" style="color:var(--text-sub); font-size:12px; margin-left:8px;"><i class="fa-solid fa-right-from-bracket"></i></a>
+      {% else %}
+        <a href="/login" style="color:var(--text-sub); font-size:12px;"><i class="fa-solid fa-lock"></i> 管理者ログイン</a>
+      {% endif %}
+    </div>
+  </nav>
+
+  <div class="dash-layout">
+    <aside class="sidebar">
+      <div class="sidebar-label">Navigation</div>
+      <nav class="sidebar-nav">
+        <a href="/" class="active"><i class="fa-solid fa-chart-pie"></i> 統計</a>
+        <a href="/admin/bulk-dm"><i class="fa-solid fa-user-shield"></i> 運営ツール</a>
+      </nav>
+    </aside>
+
+    <main class="main-content">
+      <div class="page-header fade-up">
+        <div class="page-header-label">Community Stats</div>
+        <h1>コミュニティ統計</h1>
+        <p>誰でも閲覧できる公開統計です</p>
+      </div>
+
+      <!-- 即抜け率 -->
+      <div class="card fade-up" style="margin-bottom:24px;">
+        <div class="card-inner">
+          <div class="section-head">
+            <h2>即抜け率</h2>
+            <span class="badge badge-gray">入室から24時間以内の退室</span>
+          </div>
+          <div class="three-col">
+            <div class="stat-mini card">
+              <div class="stat-mini-label"><i class="fa-solid fa-person-running"></i> 即抜け率（30日）</div>
+              <div class="stat-mini-value">{{ new_stats_30.instant_rate }}<span>%</span></div>
+              <div class="stat-mini-sub">{{ new_stats_30.instant }}人 / 新規入室 {{ new_stats_30.new_joins }}人</div>
+            </div>
+            <div class="stat-mini card">
+              <div class="stat-mini-label"><i class="fa-solid fa-person-running"></i> 即抜け率（7日）</div>
+              <div class="stat-mini-value">{{ new_stats_7.instant_rate }}<span>%</span></div>
+              <div class="stat-mini-sub">{{ new_stats_7.instant }}人 / 新規入室 {{ new_stats_7.new_joins }}人</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 退室理由 円グラフ -->
+      <div class="card fade-up">
+        <div class="card-inner">
+          <div class="section-head"><h2>退室理由の内訳</h2></div>
+          <div class="donut-wrap">
+            <canvas id="leaveChart"></canvas>
+          </div>
+          <div style="display:flex; flex-direction:column; gap:6px; margin-top:16px; font-size:12px;">
+            <div style="display:flex; justify-content:space-between;"><span style="color:var(--text-sub);">⚡ 即抜け（24h以内）</span><span>{{ leave_stats.instant }}人</span></div>
+            <div style="display:flex; justify-content:space-between;"><span style="color:var(--text-sub);">📅 短期（1〜7日）</span><span>{{ leave_stats.short }}人</span></div>
+            <div style="display:flex; justify-content:space-between;"><span style="color:var(--text-sub);">📆 長期在籍後</span><span>{{ leave_stats.long }}人</span></div>
+            <div style="display:flex; justify-content:space-between;"><span style="color:var(--text-sub);">🔨 KICK</span><span>{{ leave_stats.kick }}人</span></div>
+            <div style="display:flex; justify-content:space-between;"><span style="color:var(--text-sub);">🚫 BAN</span><span>{{ leave_stats.ban }}人</span></div>
+          </div>
+        </div>
+      </div>
+
+    </main>
+  </div>
+
+  <nav class="dash-mobile-nav">
+    <a href="/" class="active"><i class="fa-solid fa-chart-pie"></i>統計</a>
+    <a href="/admin/bulk-dm"><i class="fa-solid fa-user-shield"></i>運営ツール</a>
+  </nav>
+
+  <script>
+    // テーマ
+    const chk = document.getElementById('themeChk');
+    const icon = document.getElementById('themeIcon');
+    const saved = localStorage.getItem('theme') || 'dark';
+    document.documentElement.setAttribute('data-theme', saved);
+    chk.checked = saved === 'light';
+    icon.textContent = saved === 'light' ? '🌙' : '☀️';
+    chk.addEventListener('change', () => {
+      const t = chk.checked ? 'light' : 'dark';
+      document.documentElement.setAttribute('data-theme', t);
+      localStorage.setItem('theme', t);
+      icon.textContent = t === 'light' ? '🌙' : '☀️';
+    });
+
+    // 退室理由 円グラフ
+    const leaveCtx = document.getElementById('leaveChart').getContext('2d');
+    new Chart(leaveCtx, {
+      type: 'doughnut',
+      data: {
+        labels: ['即抜け', '短期', '長期', 'KICK', 'BAN'],
+        datasets: [{
+          data: [
+            {{ leave_stats.instant }},
+            {{ leave_stats.short }},
+            {{ leave_stats.long }},
+            {{ leave_stats.kick }},
+            {{ leave_stats.ban }},
+          ],
+          backgroundColor: [
+            'rgba(232,161,62,0.8)',
+            'rgba(232,161,62,0.5)',
+            'rgba(232,161,62,0.3)',
+            'rgba(140,142,149,0.6)',
+            'rgba(178,59,50,0.85)',
+          ],
+          borderWidth: 0,
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+        }
+      }
+    });
+  </script>
+</body>
+</html>
