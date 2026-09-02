@@ -9,9 +9,21 @@ target_typeでuser/server/botを切り替える（サブコマンド化はせず
 /report, /checkに引数として持たせる設計）。typing.Literalを使うとdiscord.py側で
 自動的にドロップダウン選択肢になる。
 
+user-installable app対応（discord.py 2.4+）:
+allowed_installs(guilds=True, users=True) — サーバーへの導入・個人アカウントへの
+導入の両方を許可する。
+allowed_contexts(guilds=True, dms=True, private_channels=True) — サーバー内・DM・
+グループDM等の非公式チャンネルの全部で実行可能にする。
+/report, /check はどちらもGitHub上のデータ参照とDB書き込みだけで、実行元のサーバーに
+依存する処理（ロール付与など）が無いため、両方とも全許可にしている。
+
 起動時sync:
 - GUILD_ID が設定されていれば、そのサーバー限定でコピー・sync（即時反映、開発中向け）
-- 未設定ならグローバルsync（全サーバー反映まで最大1時間程度）
+  ただし、この経路ではuser-install/DM実行の動作確認はできない
+  （ギルド限定コピーはそのギルド内でしか使えないため）。DM・未導入サーバーからの
+  動作確認をしたい場合はGUILD_IDを外してグローバルsyncする必要がある
+  （反映まで最大1時間程度）。
+- 未設定ならグローバルsync（全サーバー・DM含めて反映まで最大1時間程度）
 - discord.Client は commands.Bot と違い add_listener を持たないため、
   bot/events.py 側で既に設定された on_ready を保持したまま、後ろに
   コマンドsyncを繋いだ新しい on_ready で再代入する（上書きではなく連結）
@@ -40,6 +52,8 @@ def setup_commands(bot: discord.Client) -> app_commands.CommandTree:
         target_type="確認する対象の種類",
         target_id="確認するID（ユーザーID / サーバーID / BotのユーザーID）",
     )
+    @app_commands.allowed_installs(guilds=True, users=True)
+    @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
     async def check(
         interaction: discord.Interaction,
         target_type: TargetType,
@@ -56,6 +70,8 @@ def setup_commands(bot: discord.Client) -> app_commands.CommandTree:
         server_name="対象がサーバーの場合のサーバー名（サーバー通報時は必須。Botは対象サーバーに未参加のため自動取得できません）",
         related_id="サーバーの場合は作成者のユーザーID、Botの場合は開発者のユーザーID（任意・分かる範囲で）",
     )
+    @app_commands.allowed_installs(guilds=True, users=True)
+    @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
     async def report(
         interaction: discord.Interaction,
         target_type: TargetType,
