@@ -29,6 +29,7 @@ allowed_contexts(guilds=True, dms=True, private_channels=True) — サーバー�
   コマンドsyncを繋いだ新しい on_ready で再代入する（上書きではなく連結）
 """
 
+import logging
 import os
 from typing import Literal, Optional
 
@@ -37,6 +38,8 @@ from discord import app_commands
 
 from bot.commands.check import handle_check
 from bot.commands.report import handle_report
+
+logger = logging.getLogger(__name__)
 
 GUILD_ID = os.getenv("GUILD_ID")
 MAINTAINER_CHANNEL_ID = os.getenv("MAINTAINER_CHANNEL_ID")
@@ -106,10 +109,10 @@ def setup_commands(bot: discord.Client) -> app_commands.CommandTree:
             guild = discord.Object(id=int(GUILD_ID))
             tree.copy_global_to(guild=guild)
             synced = await tree.sync(guild=guild)
-            print(f"[commands] synced {len(synced)} command(s) to guild {GUILD_ID}")
+            logger.info(f"synced {len(synced)} command(s) to guild {GUILD_ID}")
         else:
             synced = await tree.sync()
-            print(f"[commands] synced {len(synced)} command(s) globally")
+            logger.info(f"synced {len(synced)} command(s) globally")
 
     original_on_ready = getattr(bot, "on_ready", None)
 
