@@ -4,6 +4,7 @@ routers/api.py
 招待リンク詳細（即抜け率）、処罰履歴、一斉DM・個別チャット対応
 """
 
+import logging
 import os
 import asyncio
 from datetime import datetime, timezone
@@ -16,6 +17,8 @@ import database
 import discord_rest
 from routers.auth import get_session
 
+logger = logging.getLogger(__name__)
+
 templates: Jinja2Templates = None
 
 router = APIRouter()
@@ -24,7 +27,7 @@ MOD_ROLE_ID   = os.getenv("MOD_ROLE_ID", "0")
 ADMIN_ROLE_ID = os.getenv("ADMIN_ROLE_ID", "0")
 
 if not ADMIN_ROLE_ID or ADMIN_ROLE_ID == "0":
-    print("[Dashboard] 警告: 環境変数 ADMIN_ROLE_ID が未設定です。管理者専用機能（一斉DM等）は誰もログインできません。")
+    logger.warning("環境変数 ADMIN_ROLE_ID が未設定です。管理者専用機能（一斉DM等）は誰もログインできません。")
 
 
 def _check_auth(request: Request):
@@ -53,7 +56,7 @@ async def _check_admin(request: Request):
         return result
     session = result
     if not session.get("is_admin", False):
-        print(f"[Dashboard] 管理者ロール判定NG: user_id={session.get('user_id', '')} はセッション上 is_admin=False です（要再ログイン、または ADMIN_ROLE_ID 未設定の可能性）")
+        logger.warning(f"管理者ロール判定NG: user_id={session.get('user_id', '')} はセッション上 is_admin=False です（要再ログイン、または ADMIN_ROLE_ID 未設定の可能性）")
         return RedirectResponse("/error/403")
     return session
 
@@ -305,7 +308,7 @@ async def bulk_dm_send(
                 database.add_dm_message(uid, "out", message, now, message_id=str(sent["id"]))
                 database.upsert_dm_thread(uid, display_name, now, status="handled")
             except Exception as e:
-                print(f"[Dashboard] 一斉DMのスレッド記録エラー: {e}")
+                logger.error(f"一斉DMのスレッド記録エラー: {e}", exc_info=True)
         except discord_rest.DiscordRestError as e:
             reason = "DMを送れません（拒否設定等）" if e.status_code == 403 else f"送信エラー（status: {e.status_code}）"
             results.append({"user_id": uid, "name": "", "ok": False, "reason": reason})
