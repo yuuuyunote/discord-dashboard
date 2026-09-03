@@ -28,15 +28,22 @@ CLIENT_ID     = os.getenv("DISCORD_CLIENT_ID", "")
 CLIENT_SECRET = os.getenv("DISCORD_CLIENT_SECRET", "")
 REDIRECT_URI  = os.getenv("REDIRECT_URI", "http://localhost:8000/auth/callback")
 SECRET_KEY    = os.getenv("SECRET_KEY", "changeme").encode()
-GUILD_ID      = os.getenv("GUILD_ID", "")
-ADMIN_ROLE_ID = os.getenv("ADMIN_ROLE_ID", "")
+
+# 管理者ロールをDiscord API（guilds.members.read）で毎回確認する方式は、
+# サーバーメンバー情報取得エンドポイントのレート制限に引っかかりやすいため、
+# 固定人数（3人）の管理者Discordユーザーidをそのまま許可リストとして持つ方式に変更。
+# これによりログイン時はcode→token交換・/users/@me の2回のAPI呼び出しだけで完結する。
+ADMIN_USER_IDS = {
+    uid.strip() for uid in os.getenv("ADMIN_USER_IDS", "").split(",") if uid.strip()
+}
 
 DISCORD_API   = "https://discord.com/api/v10"
 SESSION_COOKIE= "dashboard_session"
 SESSION_DAYS  = 7
 
-# OAuth2 スコープ（identify: ユーザー情報, guilds.members.read: ロール確認）
-SCOPES = "identify guilds.members.read"
+# OAuth2 スコープ（identify: ユーザー情報のみ。ロールはIDの許可リストで判定するため
+# guilds.members.read は不要）
+SCOPES = "identify"
 
 
 # ─── セッション管理（署名付きCookie） ─────────────────────
@@ -177,31 +184,13 @@ async def auth_callback(request: Request, code: str = "", error: str = ""):
         user = user_res.json()
         user_id = user["id"]
 
-        # 3. 対象サーバーのメンバー情報取得（ロール確認）
-        member_res = await client.get(
-            f"{DISCORD_API}/users/@me/guilds/{GUILD_ID}/member",
-            headers=headers,
-        )
-
-        # サーバー未参加
-        if member_res.status_code == 404:
-            return RedirectResponse("/login?error=not_member")
-
-        if member_res.status_code != 200:
-            return RedirectResponse("/login?error=member_failed")
-
-        member_data = member_res.json()
-        roles = member_data.get("roles", [])
-
-        # 4. 管理者ロール所持チェック。この管理ダッシュボードはDM送信・スレッド
-        #    キープアライブ等の管理者専用機能しか持たないため、ログインできる
-        #    のは管理者ロール保持者のみに限定する（統計ページはログイン不要で
-        #    公開済みのため、ここを通過する必要がない）。
-        is_admin = bool(ADMIN_ROLE_ID) and ADMIN_ROLE_ID in roles
+        # 3. 管理者判定。サーバーメンバー情報取得API（レート制限に引っかかりやすい）
+        #    は使わず、固定の管理者Discordユーザーid許可リストと突き合わせるだけ。
+        is_admin = user_id in ADMIN_USER_IDS
         if not is_admin:
             return RedirectResponse("/login?error=no_permission")
 
-    # 5. セッション発行
+    # 4. セッション発行
     session_payload = {
         "user_id":   user_id,
         "username":  user.get("username", ""),
