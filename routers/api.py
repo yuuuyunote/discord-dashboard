@@ -1,11 +1,10 @@
 """
 routers/api.py
 残す機能：統計（即抜け率・退室理由の内訳、ログイン不要で公開）、
-一斉DM・個別チャット対応・フォーラムスレッドキープアライブ（管理者ロール限定）
+一斉DM・個別チャット対応・フォーラムスレッドキープアライブ（管理者ユーザーid限定）
 """
 
 import logging
-import os
 import asyncio
 from datetime import datetime, timezone
 
@@ -15,7 +14,7 @@ from fastapi.templating import Jinja2Templates
 
 import database
 import discord_rest
-from routers.auth import get_session
+from routers.auth import get_session, ADMIN_USER_IDS
 
 logger = logging.getLogger(__name__)
 
@@ -23,10 +22,8 @@ templates: Jinja2Templates = None
 
 router = APIRouter()
 
-ADMIN_ROLE_ID = os.getenv("ADMIN_ROLE_ID", "0")
-
-if not ADMIN_ROLE_ID or ADMIN_ROLE_ID == "0":
-    logger.warning("環境変数 ADMIN_ROLE_ID が未設定です。管理者専用機能（一斉DM等）は誰もログインできません。")
+if not ADMIN_USER_IDS:
+    logger.warning("環境変数 ADMIN_USER_IDS が未設定です。管理者専用機能（一斉DM等）は誰もログインできません。")
 
 
 async def _check_admin(request: Request):
@@ -48,7 +45,7 @@ async def _check_admin(request: Request):
         return RedirectResponse("/login")
     session = result
     if not session.get("is_admin", False):
-        logger.warning(f"管理者ロール判定NG: user_id={session.get('user_id', '')} はセッション上 is_admin=False です（要再ログイン、または ADMIN_ROLE_ID 未設定の可能性）")
+        logger.warning(f"管理者判定NG: user_id={session.get('user_id', '')} はセッション上 is_admin=False です（要再ログイン、または ADMIN_USER_IDS に未登録の可能性）")
         return RedirectResponse("/error/403")
     return session
 
