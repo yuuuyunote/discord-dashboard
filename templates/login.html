@@ -23,10 +23,8 @@
       {% if request.query_params.get('error') %}
       <div class="login-error">
         {% set err = request.query_params.get('error') %}
-        {% if err == 'not_member' %}
-          <i class="fa-solid fa-circle-exclamation"></i> 対象サーバーのメンバーではありません。
-        {% elif err == 'no_permission' %}
-          <i class="fa-solid fa-circle-exclamation"></i> 管理者ロールが確認できませんでした。
+        {% if err == 'no_permission' %}
+          <i class="fa-solid fa-circle-exclamation"></i> 管理者として登録されていないアカウントです。
         {% elif err == 'cancelled' %}
           <i class="fa-solid fa-circle-exclamation"></i> ログインをキャンセルしました。
         {% else %}
@@ -41,7 +39,7 @@
       {% endif %}
       <p class="login-note">
         <i class="fa-solid fa-shield-halved"></i>
-        管理者ロールを持つメンバーのみアクセスできます
+        管理者として登録されたDiscordアカウントのみアクセスできます
       </p>
     </div>
   </div>
