@@ -20,6 +20,28 @@
         <i class="fa-brands fa-discord"></i>
         Discord でログイン
       </a>
+
+      <div class="login-divider"><span>または</span></div>
+
+      <form action="/login/password" method="post" class="login-password-form">
+        <input
+          type="password"
+          name="password"
+          class="filter-input login-password-input"
+          placeholder="管理者パスワード"
+          autocomplete="current-password"
+          required
+        >
+        <button type="submit" class="btn btn-outline login-password-submit">
+          <i class="fa-solid fa-key"></i>
+          パスワードでログイン
+        </button>
+      </form>
+      <p class="login-note login-password-note">
+        <i class="fa-solid fa-triangle-exclamation"></i>
+        Discordログイン障害時の一時的な代替手段です
+      </p>
+
       {% if request.query_params.get('error') %}
       <div class="login-error">
         {% set err = request.query_params.get('error') %}
@@ -27,6 +49,10 @@
           <i class="fa-solid fa-circle-exclamation"></i> 管理者として登録されていないアカウントです。
         {% elif err == 'cancelled' %}
           <i class="fa-solid fa-circle-exclamation"></i> ログインをキャンセルしました。
+        {% elif err == 'wrong_password' %}
+          <i class="fa-solid fa-circle-exclamation"></i> パスワードが違います。
+        {% elif err == 'password_login_disabled' %}
+          <i class="fa-solid fa-circle-exclamation"></i> パスワードログインは現在無効です。
         {% else %}
           <i class="fa-solid fa-circle-exclamation"></i> ログインに失敗しました。再度お試しください。
         {% endif %}
