@@ -293,6 +293,17 @@ button { font-family: inherit; }
 }
 .login-note { margin-top: 24px; font-size: 12px; color: var(--text-sub); line-height: 1.7; }
 .login-note i { color: var(--accent); margin-right: 4px; }
+.login-divider {
+  display: flex; align-items: center; gap: 12px; margin: 24px 0;
+  font-size: 12px; color: var(--text-sub);
+}
+.login-divider::before, .login-divider::after {
+  content: ""; flex: 1; height: 1px; background: var(--border);
+}
+.login-password-form { display: flex; flex-direction: column; gap: 10px; }
+.login-password-input { width: 100%; text-align: center; }
+.login-password-submit { width: 100%; justify-content: center; }
+.login-password-note { margin-top: 14px; }
 
 /* ─────────────── Toast ─────────────── */
 .toast {
