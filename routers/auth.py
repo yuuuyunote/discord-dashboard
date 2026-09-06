@@ -11,7 +11,7 @@ import json
 from datetime import datetime, timezone
 
 import httpx
-from fastapi import APIRouter, Request, Response
+from fastapi import APIRouter, Form, Request, Response
 from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 
@@ -36,6 +36,13 @@ SECRET_KEY    = os.getenv("SECRET_KEY", "changeme").encode()
 ADMIN_USER_IDS = {
     uid.strip() for uid in os.getenv("ADMIN_USER_IDS", "").split(",") if uid.strip()
 }
+
+# ─── 一時的なパスワードログイン ───────────────────────────
+# DiscordのOAuth2 token交換がRenderの共有IPに対するグローバルレート制限(429)で
+# 恒常的に失敗するようになったため、復旧までの一時措置としてパスワードのみで
+# 管理者ログインできる経路を追加する。Discord APIを一切呼ばないため429の影響を受けない。
+# 復旧後は環境変数 ADMIN_PASSWORD を削除すれば /login/password は自動的に無効化される。
+ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "")
 
 DISCORD_API   = "https://discord.com/api/v10"
 SESSION_COOKIE= "dashboard_session"
@@ -144,6 +151,33 @@ async def auth_discord():
     return RedirectResponse(
         f"https://discord.com/oauth2/authorize?{params}"
     )
+
+
+@router.post("/login/password", include_in_schema=False)
+async def login_password(request: Request, password: str = Form(...)):
+    """一時的なパスワードログイン。
+
+    Discord OAuth2のtoken交換がRenderの共有IPに対するグローバルレート制限で
+    恒常的に失敗している間の暫定措置。Discord APIを一切呼ばないため429の影響を
+    受けない。ADMIN_PASSWORD未設定なら常に無効（password_login_disabled）。
+    """
+    if not ADMIN_PASSWORD:
+        return RedirectResponse("/login?error=password_login_disabled")
+
+    if not hmac.compare_digest(password, ADMIN_PASSWORD):
+        logger.warning("パスワードログイン失敗（パスワード不一致）")
+        return RedirectResponse("/login?error=wrong_password")
+
+    session_payload = {
+        "user_id":   "password-login",
+        "username":  "管理者（パスワードログイン）",
+        "avatar":    "",
+        "is_admin":  True,
+        "logged_in": datetime.now(timezone.utc).isoformat(),
+    }
+    response = RedirectResponse("/admin/bulk-dm", status_code=302)
+    set_session(response, session_payload)
+    return response
 
 
 @router.get("/auth/callback", include_in_schema=False)
