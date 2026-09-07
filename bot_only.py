@@ -99,17 +99,6 @@ async def _import_existing_members(guild: discord.Guild) -> None:
     logger.info(f"インポート完了: 新規登録 {inserted} 人 / スキップ {skip} 件")
 
 
-async def _sync_commands() -> None:
-    await bot.wait_until_ready()
-    try:
-        guild  = discord.Object(id=GUILD_ID)
-        tree.copy_global_to(guild=guild)
-        synced = await tree.sync(guild=guild)
-        logger.info(f"スラッシュコマンド同期完了: {len(synced)}件")
-    except Exception as e:
-        logger.error(f"スラッシュコマンド同期エラー: {e}", exc_info=True)
-
-
 async def _on_ready_tasks() -> None:
     await bot.wait_until_ready()
     guild = bot.get_guild(GUILD_ID)
@@ -125,7 +114,9 @@ async def main() -> None:
     logger.info("DB初期化完了")
 
     async with bot:
-        bot.loop.create_task(_sync_commands())
+        # スラッシュコマンドの同期は setup_commands() が仕込む on_ready フック側で
+        # 行う（COMMAND_SYNC_GUILD_ID未設定ならグローバルsync＝user-install/DM対応）。
+        # ここで別途syncすると常にGUILD_ID限定になり、user-install/DMが死ぬため廃止した。
         bot.loop.create_task(_on_ready_tasks())
         await bot.start(DISCORD_TOKEN)
 
