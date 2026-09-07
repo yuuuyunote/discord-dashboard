@@ -18,12 +18,18 @@ allowed_contexts(guilds=True, dms=True, private_channels=True) — サーバー�
 依存する処理（ロール付与など）が無いため、両方とも全許可にしている。
 
 起動時sync:
-- GUILD_ID が設定されていれば、そのサーバー限定でコピー・sync（即時反映、開発中向け）
-  ただし、この経路ではuser-install/DM実行の動作確認はできない
-  （ギルド限定コピーはそのギルド内でしか使えないため）。DM・未導入サーバーからの
-  動作確認をしたい場合はGUILD_IDを外してグローバルsyncする必要がある
-  （反映まで最大1時間程度）。
-- 未設定ならグローバルsync（全サーバー・DM含めて反映まで最大1時間程度）
+- COMMAND_SYNC_GUILD_ID が設定されていれば、そのサーバー限定でコピー・sync
+  （即時反映、開発中向け）。ただし、この経路ではuser-install/DM実行の動作確認は
+  できない（ギルド限定コピーはそのギルド内でしか使えないため）。
+- 未設定ならグローバルsync（全サーバー・DM・user-install含めて反映まで最大1時間程度）。
+  本番はこちら（COMMAND_SYNC_GUILD_ID を設定しない）が前提——/report /check を
+  user-installアプリとしても使えるようにするには、グローバルsyncが必須。
+- 環境変数名をアプリ全体の GUILD_ID（events.py 等がGuide Base +サーバーの
+  メンバー追跡に使っている、コマンド同期とは無関係の値）とは別にしているのは、
+  「本番でGUILD_IDは設定したままグローバルsyncしたい」という状態と
+  「GUILD_IDと同じ値で開発中だけ即時反映させたい」という状態を両立させるため。
+  同じ変数を共用すると、本番でGUILD_ID未設定にできない以上、常にギルド限定syncに
+  倒れてしまい、user-install/DM対応が事実上死ぬ。
 - discord.Client は commands.Bot と違い add_listener を持たないため、
   bot/events.py 側で既に設定された on_ready を保持したまま、後ろに
   コマンドsyncを繋いだ新しい on_ready で再代入する（上書きではなく連結）
@@ -41,7 +47,9 @@ from bot.commands.report import handle_report
 
 logger = logging.getLogger(__name__)
 
-GUILD_ID = os.getenv("GUILD_ID")
+# コマンド同期の対象ギルド（開発中の即時反映用、任意）。
+# アプリ全体のメンバー追跡用 GUILD_ID とは別物 —— 詳しくは上のdocstring参照。
+COMMAND_SYNC_GUILD_ID = os.getenv("COMMAND_SYNC_GUILD_ID")
 MAINTAINER_CHANNEL_ID = os.getenv("MAINTAINER_CHANNEL_ID")
 
 TargetType = Literal["user", "server", "bot"]
@@ -105,14 +113,17 @@ def setup_commands(bot: discord.Client) -> app_commands.CommandTree:
         )
 
     async def _sync_commands() -> None:
-        if GUILD_ID:
-            guild = discord.Object(id=int(GUILD_ID))
+        if COMMAND_SYNC_GUILD_ID:
+            guild = discord.Object(id=int(COMMAND_SYNC_GUILD_ID))
             tree.copy_global_to(guild=guild)
             synced = await tree.sync(guild=guild)
-            logger.info(f"synced {len(synced)} command(s) to guild {GUILD_ID}")
+            logger.info(
+                f"synced {len(synced)} command(s) to guild {COMMAND_SYNC_GUILD_ID} "
+                "(dev mode: user-install/DM will NOT work via this sync)"
+            )
         else:
             synced = await tree.sync()
-            logger.info(f"synced {len(synced)} command(s) globally")
+            logger.info(f"synced {len(synced)} command(s) globally (user-install/DM enabled)")
 
     original_on_ready = getattr(bot, "on_ready", None)
 
