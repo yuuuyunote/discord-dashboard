@@ -75,10 +75,9 @@ def setup_commands(bot: discord.Client) -> app_commands.CommandTree:
     @tree.command(name="report", description="悪質なユーザー/サーバー/Botを通報する")
     @app_commands.describe(
         target_type="通報する対象の種類",
-        target_id="通報するID（ユーザーID / サーバーID / BotのユーザーID）",
+        target_id="通報するID（ユーザーID / サーバーID・招待リンク / BotのユーザーID）",
         evidence_image="証拠画像（必須）",
         note="補足（任意）",
-        server_name="対象がサーバーの場合のサーバー名（サーバー通報時は必須。Botは対象サーバーに未参加のため自動取得できません）",
         related_id="サーバーの場合は作成者のユーザーID、Botの場合は開発者のユーザーID（任意・分かる範囲で）",
     )
     @app_commands.allowed_installs(guilds=True, users=True)
@@ -89,7 +88,6 @@ def setup_commands(bot: discord.Client) -> app_commands.CommandTree:
         target_id: str,
         evidence_image: discord.Attachment,
         note: Optional[str] = None,
-        server_name: Optional[str] = None,
         related_id: Optional[str] = None,
     ) -> None:
         if not MAINTAINER_CHANNEL_ID:
@@ -107,7 +105,6 @@ def setup_commands(bot: discord.Client) -> app_commands.CommandTree:
             target_id,
             evidence_image,
             note,
-            server_name,
             related_id,
             channel,
         )
