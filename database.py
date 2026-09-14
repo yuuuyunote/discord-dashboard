@@ -7,14 +7,25 @@ reports拡張：target_type / creator_or_developer_id（user/server/bot対応）
 
 import os
 import json
+import logging
 from datetime import datetime, timezone
 from typing import Optional
 
 import psycopg2
 import psycopg2.extras
+import psycopg2.pool
+
+logger = logging.getLogger(__name__)
+
+# 以前は呼び出しごとにpsycopg2.connect()していたため、/reportの最終送信のように
+# 1回のコマンド内で複数回DB呼び出しが発生する場面で、その都度TLSハンドシェイクと
+# Neon（サーバーレスPostgres）側のコールドスタートが重なり体感速度を悪化させていた。
+# 常時1本以上のコネクションをプールで維持することで新規接続そのものを減らし、
+# 副次的にNeon側のコンピュートが自動サスペンドしにくくなる効果もある。
+_pool: Optional["psycopg2.pool.ThreadedConnectionPool"] = None
 
 
-def get_conn():
+def _get_database_url() -> str:
     url = os.environ.get("DATABASE_URL", "")
     if not url:
         try:
@@ -28,22 +39,65 @@ def get_conn():
             pass
     if not url:
         raise ValueError("DATABASE_URL が設定されていません")
-    return psycopg2.connect(url, cursor_factory=psycopg2.extras.RealDictCursor)
+    return url
+
+
+def _get_pool() -> "psycopg2.pool.ThreadedConnectionPool":
+    global _pool
+    if _pool is None:
+        _pool = psycopg2.pool.ThreadedConnectionPool(
+            1,
+            5,
+            dsn=_get_database_url(),
+            cursor_factory=psycopg2.extras.RealDictCursor,
+        )
+    return _pool
+
+
+def get_conn():
+    """プールから接続を1本借りる。使い終わったら release_conn() で必ず返すこと。"""
+    return _get_pool().getconn()
+
+
+def release_conn(conn, *, discard: bool = False) -> None:
+    """
+    借りた接続をプールに返す。
+    discard=True の場合はプールに戻さず破棄する（Neon側でアイドルタイムアウト等に
+    より既に切断されていた接続を、壊れたままプールに戻さないようにするため）。
+    """
+    _get_pool().putconn(conn, close=discard)
+
+
+def _run(conn, sql: str, args: tuple) -> list[dict]:
+    with conn.cursor() as cur:
+        cur.execute(sql, args)
+        conn.commit()
+        try:
+            return [dict(r) for r in cur.fetchall()]
+        except psycopg2.ProgrammingError:
+            return []
 
 
 def _execute(sql: str, args: tuple = ()) -> list[dict]:
     conn = get_conn()
     try:
-        with conn.cursor() as cur:
-            cur.execute(sql, args)
-            conn.commit()
-            try:
-                rows = cur.fetchall()
-                return [dict(r) for r in rows]
-            except psycopg2.ProgrammingError:
-                return []
-    finally:
-        conn.close()
+        result = _run(conn, sql, args)
+    except psycopg2.OperationalError:
+        # Neon側のアイドルサスペンド等でプール内の接続が切れていた場合、
+        # その接続は破棄して1回だけ新規接続で取り直す。
+        logger.warning("stale DB connection detected, reconnecting and retrying once")
+        release_conn(conn, discard=True)
+        conn = get_conn()
+        try:
+            result = _run(conn, sql, args)
+        except Exception:
+            release_conn(conn, discard=True)
+            raise
+        release_conn(conn)
+        return result
+    else:
+        release_conn(conn)
+        return result
 
 
 def _execute_many(statements: list[tuple]) -> None:
@@ -53,8 +107,22 @@ def _execute_many(statements: list[tuple]) -> None:
             for sql, args in statements:
                 cur.execute(sql, args)
         conn.commit()
-    finally:
-        conn.close()
+    except psycopg2.OperationalError:
+        logger.warning("stale DB connection detected, reconnecting and retrying once")
+        release_conn(conn, discard=True)
+        conn = get_conn()
+        try:
+            with conn.cursor() as cur:
+                for sql, args in statements:
+                    cur.execute(sql, args)
+            conn.commit()
+        except Exception:
+            release_conn(conn, discard=True)
+            raise
+        release_conn(conn)
+        return
+    else:
+        release_conn(conn)
 
 
 # ─────────────────────────────────────────────────────────
@@ -365,7 +433,7 @@ def insert_new_users_bulk(rows: list[tuple[str, str, str, Optional[str]]]) -> in
         conn.commit()
         return inserted
     finally:
-        conn.close()
+        release_conn(conn)
 
 def get_all_user_ids() -> set[str]:
     rows = _execute("SELECT user_id FROM users")
@@ -440,7 +508,7 @@ def add_activity_logs_bulk(records: list[tuple[str, str, str]]) -> None:
             )
             conn.commit()
     finally:
-        conn.close()
+        release_conn(conn)
 
 def bulk_increment_invite_messages(counts: dict[str, int]) -> None:
     """counts: {invite_code: このバッチ内での発言数}"""
@@ -456,7 +524,7 @@ def bulk_increment_invite_messages(counts: dict[str, int]) -> None:
                 )
             conn.commit()
     finally:
-        conn.close()
+        release_conn(conn)
 
 def has_first_message(user_id: str) -> bool:
     rows = _execute("SELECT 1 FROM first_message_granted WHERE user_id=%s", (user_id,))
