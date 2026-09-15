@@ -34,7 +34,7 @@ CONFIRMATION_TEXT = (
     "**送信前にご確認ください**\n"
     "① 虚偽・悪意のある通報を行った場合、Botの利用を制限する場合があります\n"
     "② 証拠画像は運営メンバーのみ閲覧可能な非公開チャンネルに保存されます\n"
-    "③ 通報内容によっては却下される場合があり、却下理由は通報者にDMで通知されます"
+    "③ 通報内容によっては却下される場合があります"
 )
 
 _RELATED_ID_FIELD_LABEL = {"server": "作成者ID", "bot": "開発者ID"}
@@ -187,7 +187,7 @@ class CategoryConsentView(discord.ui.View):
         asyncio.create_task(_record_maintainer_message_id(report_id, str(sent.id)))
 
         await interaction.edit_original_response(
-            content="送信しました。結果は追ってDMでお知らせします。", view=None
+            content="送信しました。ご協力ありがとうございます。", view=None
         )
 
 
@@ -207,7 +207,7 @@ async def _record_maintainer_message_id(report_id: int, message_id: str) -> None
 
 class RejectReasonModal(discord.ui.Modal, title="却下理由"):
     reason = discord.ui.TextInput(
-        label="却下理由（通報者にDMで送られます）",
+        label="却下理由（メンテナ用チャンネルの記録に残ります）",
         style=discord.TextStyle.paragraph,
         required=True,
         max_length=500,
@@ -330,15 +330,6 @@ class ApprovalView(discord.ui.View):
 
         await db.mark_merged(self.report_id)
 
-        reporter = await interaction.client.fetch_user(int(report.reporter_id))
-        try:
-            await reporter.send(
-                f"通報（対象: `{report.target_id}` / {target_type_label(report.target_type)}）が承認され、"
-                "通報リストに反映されました。ご協力ありがとうございます。"
-            )
-        except discord.Forbidden:
-            pass  # DM拒否設定。専用チャンネル側の表示のみで良しとする。
-
         await interaction.message.edit(
             content=f"✅ 承認済み（{interaction.user.mention}）", view=self
         )
@@ -353,21 +344,12 @@ class ApprovalView(discord.ui.View):
             item.disabled = True
 
         try:
-            report = await db.mark_rejected(self.report_id, reason)
+            await db.mark_rejected(self.report_id, reason)
         except NotImplementedError:
             await interaction.followup.send(
                 "（データベース未接続のため却下処理はまだ完結できません。）", ephemeral=True
             )
             return
-
-        reporter = await interaction.client.fetch_user(int(report.reporter_id))
-        try:
-            await reporter.send(
-                f"通報（対象: `{report.target_id}` / {target_type_label(report.target_type)}）は却下されました。\n"
-                f"理由: {reason}"
-            )
-        except discord.Forbidden:
-            pass
 
         await interaction.message.edit(
             content=f"❌ 却下済み（{interaction.user.mention} / 理由: {reason}）", view=self
