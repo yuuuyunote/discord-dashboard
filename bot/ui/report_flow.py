@@ -11,7 +11,9 @@ bot/ui/report_flow.py
 3. RejectReasonModal — 却下時の理由入力。
 """
 
+import asyncio
 import datetime
+import logging
 from typing import Optional
 
 import discord
@@ -25,6 +27,8 @@ from bot.reports.github import (
     get_existing_record,
     merge_records,
 )
+
+logger = logging.getLogger(__name__)
 
 CONFIRMATION_TEXT = (
     "**送信前にご確認ください**\n"
@@ -126,8 +130,11 @@ class CategoryConsentView(discord.ui.View):
         for item in self.children:
             item.disabled = True
 
-        try:
-            report_id = await db.insert_pending_report(
+        # DBへのpending report挿入と、証拠画像のダウンロード（Discord CDNからの取得）は
+        # 互いに依存関係が無いため並列実行する。従来は直列だったため、この2つの
+        # 待ち時間がそのまま合算されて「送信（確定）」時の体感速度を悪化させていた。
+        insert_result, evidence_result = await asyncio.gather(
+            db.insert_pending_report(
                 reporter_id=str(self.reporter.id),
                 reporter_username=self.reporter.name,
                 target_type=self.target_type,
@@ -136,15 +143,24 @@ class CategoryConsentView(discord.ui.View):
                 categories=self.selected_categories,
                 note=self.note,
                 creator_or_developer_id=self.related_id,
-            )
-        except NotImplementedError:
+            ),
+            self.evidence_attachment.to_file(),
+            return_exceptions=True,
+        )
+
+        if isinstance(insert_result, NotImplementedError):
             await interaction.edit_original_response(
                 content="（データベース未接続のため、この先の保存はまだ動作しません。GitHub連携部分の確認だけ進めています。）",
                 view=None,
             )
             return
+        if isinstance(insert_result, BaseException):
+            raise insert_result
+        if isinstance(evidence_result, BaseException):
+            raise evidence_result
 
-        evidence_file = await self.evidence_attachment.to_file()
+        report_id = insert_result
+        evidence_file = evidence_result
         categories_label = "、".join(label_for(c, self.target_type) for c in self.selected_categories)
         embed = discord.Embed(
             title=f"新しい通報（{target_type_label(self.target_type)}）", color=discord.Color.orange()
@@ -164,10 +180,28 @@ class CategoryConsentView(discord.ui.View):
 
         approval_view = ApprovalView(report_id=report_id)
         sent = await self.maintainer_channel.send(embed=embed, file=evidence_file, view=approval_view)
-        await db.set_maintainer_message_id(report_id, str(sent.id))
+
+        # ユーザーへの応答はここで確定させる。maintainer_channel_message_idの記録は
+        # 承認/却下ボタンが押されるまで参照されないため、ここでawaitして待たせる
+        # 必要は無く、バックグラウンドに回してユーザーの体感速度に影響させない。
+        asyncio.create_task(_record_maintainer_message_id(report_id, str(sent.id)))
 
         await interaction.edit_original_response(
             content="送信しました。結果は追ってDMでお知らせします。", view=None
+        )
+
+
+async def _record_maintainer_message_id(report_id: int, message_id: str) -> None:
+    """
+    on_submit からfire-and-forgetで呼ばれる。失敗してもユーザー応答は既に返した後なので、
+    ここでの例外はログに残すだけに留める（承認/却下自体は report_id で行えるため、
+    この値の記録が多少遅れても支障は無い）。
+    """
+    try:
+        await db.set_maintainer_message_id(report_id, message_id)
+    except Exception:
+        logger.exception(
+            "failed to record maintainer_channel_message_id for report #%s", report_id
         )
 
 
