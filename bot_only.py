@@ -64,6 +64,8 @@ bot = discord.Client(intents=intents)
 setup_events(bot)
 tree = setup_commands(bot)
 
+from bot.suggestions import setup_suggestions
+setup_suggestions(bot, tree)
 
 async def _import_existing_members(guild: discord.Guild) -> None:
     """
