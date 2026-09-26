@@ -6,10 +6,10 @@ discord.Client は commands.Bot と違い app_commands.CommandTree を持たな�
 ここで自分でツリーを組み立てる。
 
 target_typeでuser/server/botを切り替える（サブコマンド化はせず、単一の
-/report, /checkに引数として持たせる設計）。typing.Literalを使うとdiscord.py側で
+/reportに引数として持たせる設計）。typing.Literalを使うとdiscord.py側で
 自動的にドロップダウン選択肢になる。
 
-user-installable app対応は廃止済み。/report, /check はギルド内でのみ実行可能
+user-installable app対応は廃止済み。/report はギルド内でのみ実行可能
 （allowed_installs/allowed_contexts は付与しない = discord.py既定のギルド専用挙動）。
 
 起動時sync:
@@ -33,7 +33,6 @@ from typing import Literal, Optional
 import discord
 from discord import app_commands
 
-from bot.commands.check import handle_check
 from bot.commands.report import handle_report
 
 logger = logging.getLogger(__name__)
@@ -48,18 +47,6 @@ TargetType = Literal["user", "server", "bot"]
 
 def setup_commands(bot: discord.Client) -> app_commands.CommandTree:
     tree = app_commands.CommandTree(bot)
-
-    @tree.command(name="check", description="ユーザー/サーバー/Botが通報リストに載っているか確認する")
-    @app_commands.describe(
-        target_type="確認する対象の種類",
-        target_id="確認するID（ユーザーID / サーバーID / BotのユーザーID）",
-    )
-    async def check(
-        interaction: discord.Interaction,
-        target_type: TargetType,
-        target_id: str,
-    ) -> None:
-        await handle_check(interaction, target_type, target_id)
 
     @tree.command(name="report", description="悪質なユーザー/サーバー/Botを通報する")
     @app_commands.describe(
