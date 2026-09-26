@@ -12,18 +12,19 @@ target_typeでuser/server/botを切り替える（サブコマンド化はせず
 user-installable app対応は廃止済み。/report はギルド内でのみ実行可能
 （allowed_installs/allowed_contexts は付与しない = discord.py既定のギルド専用挙動）。
 
-起動時sync:
-- COMMAND_SYNC_GUILD_ID が設定されていれば、そのサーバー限定でコピー・sync
-  （即時反映、開発中向け）。
-- 未設定ならグローバルsync（全サーバーに反映まで最大1時間程度。DM/user-installでは
-  利用不可）。
-- 環境変数名をアプリ全体の GUILD_ID（events.py 等がGuide Base +サーバーの
-  メンバー追跡に使っている、コマンド同期とは無関係の値）とは別にしているのは、
-  「本番でGUILD_IDは設定したままグローバルsyncしたい」という状態と
-  「GUILD_IDと同じ値で開発中だけ即時反映させたい」という状態を両立させるため。
-- discord.Client は commands.Bot と違い add_listener を持たないため、
-  bot/events.py 側で既に設定された on_ready を保持したまま、後ろに
-  コマンドsyncを繋いだ新しい on_ready で再代入する（上書きではなく連結）
+このBotはGuide Base +サーバー（GUILD_ID）でしか使わない前提のため、コマンドは
+常にそのサーバー限定で登録する。グローバル同期は行わない
+（全サーバーへの反映は不要な上、反映まで最大1時間かかり開発時の確認に不向き）。
+GUILD_IDは events.py 等がメンバー追跡に使っているものと同じ環境変数を流用する。
+
+過去に「開発中はCOMMAND_SYNC_GUILD_IDでギルド限定、本番は未設定でグローバル」と
+切り替えていた時期があり、その名残でグローバル側に古いコマンドが登録されたまま
+残っていた（同名コマンドの重複表示の原因になっていた）。ギルド限定オンリーに
+統一した今回、起動のたびにグローバル側を明示的にクリアして、その残骸も掃除する。
+
+discord.Client は commands.Bot と違い add_listener を持たないため、
+bot/events.py 側で既に設定された on_ready を保持したまま、後ろに
+コマンドsyncを繋いだ新しい on_ready で再代入する（上書きではなく連結）
 """
 
 import logging
@@ -37,10 +38,12 @@ from bot.commands.report import handle_report
 
 logger = logging.getLogger(__name__)
 
-# コマンド同期の対象ギルド（開発中の即時反映用、任意）。
-# アプリ全体のメンバー追跡用 GUILD_ID とは別物 —— 詳しくは上のdocstring参照。
-COMMAND_SYNC_GUILD_ID = os.getenv("COMMAND_SYNC_GUILD_ID")
 MAINTAINER_CHANNEL_ID = os.getenv("MAINTAINER_CHANNEL_ID")
+
+# コマンドを登録する唯一のサーバー（Guide Base +）。
+# アプリ全体のメンバー追跡用 GUILD_ID と同じ値を流用する —— 詳しくは上のdocstring参照。
+GUILD_ID_STR = os.getenv("GUILD_ID", "0")
+GUILD_ID = int(GUILD_ID_STR) if GUILD_ID_STR.strip().isdigit() else 0
 
 TargetType = Literal["user", "server", "bot"]
 
@@ -84,17 +87,20 @@ def setup_commands(bot: discord.Client) -> app_commands.CommandTree:
         )
 
     async def _sync_commands() -> None:
-        if COMMAND_SYNC_GUILD_ID:
-            guild = discord.Object(id=int(COMMAND_SYNC_GUILD_ID))
-            tree.copy_global_to(guild=guild)
-            synced = await tree.sync(guild=guild)
-            logger.info(
-                f"synced {len(synced)} command(s) to guild {COMMAND_SYNC_GUILD_ID} "
-                "(dev mode: user-install/DM will NOT work via this sync)"
-            )
-        else:
-            synced = await tree.sync()
-            logger.info(f"synced {len(synced)} command(s) globally")
+        if not GUILD_ID:
+            logger.error("GUILD_ID が未設定のため、コマンドを同期できません。")
+            return
+
+        guild = discord.Object(id=GUILD_ID)
+        tree.copy_global_to(guild=guild)
+        synced = await tree.sync(guild=guild)
+        logger.info(f"synced {len(synced)} command(s) to guild {GUILD_ID}")
+
+        # 過去にグローバル同期していた名残（同名コマンドの重複表示の原因）を掃除する。
+        # ここでクリアしても、ギルド限定側は上ですでに同期済みなのでコマンド自体は消えない。
+        tree.clear_commands(guild=None)
+        await tree.sync()
+        logger.info("cleared stale global command copies")
 
     original_on_ready = getattr(bot, "on_ready", None)
 
