@@ -117,8 +117,8 @@ async def main() -> None:
 
     async with bot:
         # スラッシュコマンドの同期は setup_commands() が仕込む on_ready フック側で
-        # 行う（COMMAND_SYNC_GUILD_ID未設定ならグローバルsync、設定時はそのギルド限定
-        # で即時反映）。user-install/DM対応は廃止済みで、コマンドはギルド内でのみ実行可。
+        # 行う（GUILD_IDのGuide Base +サーバー限定で即時反映。グローバル同期はしない）。
+        # user-install/DM対応は廃止済みで、コマンドはギルド内でのみ実行可。
         bot.loop.create_task(_on_ready_tasks())
         await bot.start(DISCORD_TOKEN)
 
