@@ -8,6 +8,11 @@ bots/<id>.json として GitHub Contents API 経由で直接 main へ commit す
 スキーマ自体を単一情報源として両方が参照する形にしている）。
 jsonschemaはevalを使わないので、Cloudflare Workersで問題になった制約はここでは関係ない。
 
+スキーマの取得は、discord-reportsが非公開でも読めるよう
+REPORTS_GITHUB_TOKEN 付きの GitHub Contents API で行う
+（raw.githubusercontent.com の未認証取得は非公開リポジトリでは404になるため使わない）。
+取得に失敗した場合、すでにキャッシュしたスキーマがあればそれで検証を続ける。
+
 filename（<id>.json）とレコード内のidの一致は additionalProperties 等と違い
 JSON Schema単体では表現できないため、ここで別途チェックする
 （discord-reportsのvalidation.mjsが持っているのと同じ追加ロジック）。
@@ -16,8 +21,10 @@ user/server/bot の3種は保存先ディレクトリとスキーマが違うだ
 検証・commitの手順自体は共通なので _RECORD_KINDS に差分だけを持たせている。
 """
 
+import asyncio
 import base64
 import json
+import logging
 import os
 import time
 from dataclasses import dataclass
@@ -25,6 +32,8 @@ from typing import Callable, Optional
 
 import aiohttp
 import jsonschema
+
+logger = logging.getLogger(__name__)
 
 DATA_REPO = os.getenv("BLOCKLIST_DATA_REPO", "")  # 例: "yuuuyunote/discord-reports"
 DATA_BRANCH = os.getenv("BLOCKLIST_DATA_BRANCH", "main")
@@ -190,12 +199,30 @@ class _SchemaCache:
             raise ReportCommitError("BLOCKLIST_DATA_REPO が設定されていません。")
 
         schema_filename = _kind(target_type).schema_filename
-        url = f"https://raw.githubusercontent.com/{DATA_REPO}/{DATA_BRANCH}/schema/{schema_filename}"
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url, timeout=aiohttp.ClientTimeout(total=5)) as res:
-                if res.status != 200:
-                    raise ReportCommitError(f"スキーマの取得に失敗しました（status: {res.status}）")
-                schema = await res.json(content_type=None)
+        # 非公開リポジトリでも読めるよう、raw.githubusercontent.com ではなく
+        # 認証付きContents API（rawメディアタイプ）で取得する。
+        url = f"{GITHUB_API_BASE}/repos/{DATA_REPO}/contents/schema/{schema_filename}"
+        headers = {**_github_headers(), "Accept": "application/vnd.github.raw+json"}
+
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(
+                    url,
+                    headers=headers,
+                    params={"ref": DATA_BRANCH},
+                    timeout=aiohttp.ClientTimeout(total=5),
+                ) as res:
+                    if res.status != 200:
+                        raise ReportCommitError(f"スキーマの取得に失敗しました（status: {res.status}）")
+                    schema = await res.json(content_type=None)
+        except (ReportCommitError, aiohttp.ClientError, asyncio.TimeoutError) as e:
+            if cached is not None:
+                # 取得に失敗しても、すでに持っているスキーマで検証を続ける
+                logger.warning("スキーマの再取得に失敗したため古いキャッシュを使用します: %r", e)
+                return cached
+            if isinstance(e, ReportCommitError):
+                raise
+            raise ReportCommitError(f"スキーマの取得中に通信エラー: {e!r}") from e
 
         self._schemas[target_type] = schema
         self._fetched_at[target_type] = now
